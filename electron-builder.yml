@@ -1,0 +1,14 @@
+appId: com.pswk.college-calendar
+productName: College Calendar
+directories:
+  output: dist
+files:
+  - out/**
+  - electron/main.js
+  - electron/preload.js
+  - package.json
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

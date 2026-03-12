@@ -2,11 +2,14 @@
   "name": "college",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:dev": "next build --webpack && tsc --project tsconfig.electron.json && electron .",
+    "electron:build": "next build --webpack && tsc --project tsconfig.electron.json && electron-builder"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
@@ -20,6 +23,9 @@
     "tailwind-merge": "^3.5.0",
     "tw-animate-css": "^1.4.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "msw"]
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -28,6 +34,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.0.0",
+    "@types/electron": "^1.6.10"
   }
 }
