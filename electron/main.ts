@@ -1,17 +1,46 @@
-import { app, BrowserWindow, Tray, nativeImage, ipcMain, screen, Menu } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Tray,
+  nativeImage,
+  ipcMain,
+  screen,
+  Menu,
+  protocol,
+  net,
+} from "electron";
 import path from "path";
 import { execSync } from "child_process";
 import * as fs from "fs";
+import { pathToFileURL } from "url";
 
 let tray: Tray | null = null;
 let editorWin: BrowserWindow | null = null;
+
+// Register custom scheme before app is ready
+// "standard" makes absolute paths like /_next/... resolve correctly
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "app",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
+
+function getOutPath(...segments: string[]): string {
+  return path.join(__dirname, "..", "out", ...segments);
+}
 
 function getWallpaperPath(): string {
   return path.join(app.getPath("userData"), "calendar-wallpaper.png");
 }
 
 function setWindowsWallpaper(imagePath: string): void {
-  const escaped = imagePath.replace(/\\/g, "\\\\");
+  const escaped = imagePath.replace(/'/g, "''");
   const ps = [
     `Add-Type -TypeDefinition @"`,
     `using System.Runtime.InteropServices;`,
@@ -19,14 +48,17 @@ function setWindowsWallpaper(imagePath: string): void {
     `  [DllImport("user32.dll", CharSet = CharSet.Auto)]`,
     `  public static extern int SystemParametersInfo(int a, int b, string c, int d);`,
     `}`,
-    `"@;`,
-    `[WP]::SystemParametersInfo(20, 0, '${escaped}', 3);`,
-  ].join(" ");
+    `"@`,
+    `[WP]::SystemParametersInfo(20, 0, '${escaped}', 3)`,
+  ].join("\n");
+
+  const encoded = Buffer.from(ps, "utf16le").toString("base64");
 
   try {
-    execSync(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
-      windowsHide: true,
-    });
+    execSync(
+      `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
+      { windowsHide: true },
+    );
   } catch (e) {
     console.error("Wallpaper set failed:", e);
   }
@@ -53,7 +85,8 @@ function createEditorWindow(): void {
     },
   });
 
-  editorWin.loadFile(path.join(__dirname, "../out/calendar/index.html"));
+  // Load via custom protocol so /_next/... absolute paths resolve correctly
+  editorWin.loadURL("app://host/calendar/index.html");
 
   editorWin.on("close", (e) => {
     e.preventDefault();
@@ -118,6 +151,21 @@ ipcMain.on("close-window", () => {
 });
 
 app.whenReady().then(() => {
+  // Handle custom app:// protocol — serves files from out/ directory
+  protocol.handle("app", (request) => {
+    const url = new URL(request.url);
+    let filePath = decodeURIComponent(url.pathname);
+
+    // Remove leading slash on Windows
+    if (filePath.startsWith("/")) {
+      filePath = filePath.substring(1);
+    }
+
+    const fullPath = getOutPath(filePath);
+
+    return net.fetch(pathToFileURL(fullPath).toString());
+  });
+
   createEditorWindow();
   createTray();
   editorWin?.show();

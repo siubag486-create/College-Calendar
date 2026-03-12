@@ -40,13 +40,30 @@ const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
+const url_1 = require("url");
 let tray = null;
 let editorWin = null;
+// Register custom scheme before app is ready
+// "standard" makes absolute paths like /_next/... resolve correctly
+electron_1.protocol.registerSchemesAsPrivileged([
+    {
+        scheme: "app",
+        privileges: {
+            standard: true,
+            secure: true,
+            supportFetchAPI: true,
+            corsEnabled: true,
+        },
+    },
+]);
+function getOutPath(...segments) {
+    return path_1.default.join(__dirname, "..", "out", ...segments);
+}
 function getWallpaperPath() {
     return path_1.default.join(electron_1.app.getPath("userData"), "calendar-wallpaper.png");
 }
 function setWindowsWallpaper(imagePath) {
-    const escaped = imagePath.replace(/\\/g, "\\\\");
+    const escaped = imagePath.replace(/'/g, "''");
     const ps = [
         `Add-Type -TypeDefinition @"`,
         `using System.Runtime.InteropServices;`,
@@ -54,13 +71,12 @@ function setWindowsWallpaper(imagePath) {
         `  [DllImport("user32.dll", CharSet = CharSet.Auto)]`,
         `  public static extern int SystemParametersInfo(int a, int b, string c, int d);`,
         `}`,
-        `"@;`,
-        `[WP]::SystemParametersInfo(20, 0, '${escaped}', 3);`,
-    ].join(" ");
+        `"@`,
+        `[WP]::SystemParametersInfo(20, 0, '${escaped}', 3)`,
+    ].join("\n");
+    const encoded = Buffer.from(ps, "utf16le").toString("base64");
     try {
-        (0, child_process_1.execSync)(`powershell -NoProfile -NonInteractive -Command "${ps}"`, {
-            windowsHide: true,
-        });
+        (0, child_process_1.execSync)(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { windowsHide: true });
     }
     catch (e) {
         console.error("Wallpaper set failed:", e);
@@ -85,7 +101,8 @@ function createEditorWindow() {
             preload: path_1.default.join(__dirname, "preload.js"),
         },
     });
-    editorWin.loadFile(path_1.default.join(__dirname, "../out/calendar/index.html"));
+    // Load via custom protocol so /_next/... absolute paths resolve correctly
+    editorWin.loadURL("app://host/calendar/index.html");
     editorWin.on("close", (e) => {
         e.preventDefault();
         editorWin?.hide();
@@ -142,6 +159,17 @@ electron_1.ipcMain.on("close-window", () => {
     editorWin?.hide();
 });
 electron_1.app.whenReady().then(() => {
+    // Handle custom app:// protocol — serves files from out/ directory
+    electron_1.protocol.handle("app", (request) => {
+        const url = new URL(request.url);
+        let filePath = decodeURIComponent(url.pathname);
+        // Remove leading slash on Windows
+        if (filePath.startsWith("/")) {
+            filePath = filePath.substring(1);
+        }
+        const fullPath = getOutPath(filePath);
+        return electron_1.net.fetch((0, url_1.pathToFileURL)(fullPath).toString());
+    });
     createEditorWindow();
     createTray();
     editorWin?.show();

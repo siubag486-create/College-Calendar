@@ -233,6 +233,8 @@ const CalendarComponent: React.FC = () => {
           max-width: 1200px;
           padding: 2rem;
           box-sizing: border-box;
+          transform: scale(0.8);
+          transform-origin: center center;
         }
 
         .cal-wrapper {

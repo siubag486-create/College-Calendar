@@ -33,6 +33,7 @@ Static export mode (`output: "export"`) — no server required.
 - `components/ui/` — shadcn/ui components (add new ones via `npx shadcn add <component>`)
 - `lib/utils.ts` — `cn()` helper for merging Tailwind classes
 - `electron/` — Electron main process + preload scripts (TypeScript source + compiled JS)
+- `public/downloads/` — Downloadable files (e.g. `college-calendar-setup.exe`)
 
 ### Routes
 
@@ -51,6 +52,7 @@ Static export mode (`output: "export"`) — no server required.
 - `electron/preload.ts` — IPC bridge (`captureWallpaper`, `closeWindow`)
 - `electron-builder.yml` — NSIS installer config
 - `tsconfig.electron.json` — Separate TS config for electron compilation
+- Build output: `dist/College Calendar Setup 0.1.0.exe` → copy to `public/downloads/college-calendar-setup.exe` for web download
 - App flow: install .exe → tray icon → click to edit calendar → "SET WALLPAPER" captures PNG → sets as Windows desktop wallpaper
 
 ### Styling
@@ -70,3 +72,4 @@ Static export mode (`output: "export"`) — no server required.
 
 - Next.js 16 Turbopack has a PostCSS timeout bug — all build commands use `--webpack` flag to bypass
 - `tw-animate-css` import was removed from globals.css due to build issues
+- `next.config.ts` has custom webpack `watchOptions` to prevent Watchpack from scanning Windows system files (C:\ root)
