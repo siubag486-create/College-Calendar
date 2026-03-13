@@ -46,5 +46,8 @@ next-env.d.ts
 # downloadable binaries
 /public/downloads/*.exe
 
+# electron compiled JS (generated from .ts)
+electron/*.js
+
 # npm cache
 PSWK coding teamexchagerate.npm-cache/
