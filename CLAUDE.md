@@ -48,8 +48,9 @@ Static export mode (`output: "export"`) — no server required.
 
 ### Electron (Desktop App)
 
-- `electron/main.ts` — Tray app, frameless BrowserWindow, wallpaper capture via PowerShell + Win32 API
-- `electron/preload.ts` — IPC bridge (`captureWallpaper`, `closeWindow`)
+- `electron/main.ts` — Tray app, frameless BrowserWindow, wallpaper capture via PowerShell + Win32 API, live wallpaper (WorkerW embedding)
+- `electron/win32.ts` — Win32 FFI bindings via koffi (FindWindowW, EnumWindows, SetParent, etc.)
+- `electron/preload.ts` — IPC bridge (`captureWallpaper`, `closeWindow`, `toggleLiveMode`, `getLiveModeStatus`, `onLiveModeChanged`, `syncWallpaper`)
 - `electron-builder.yml` — NSIS installer config
 - `tsconfig.electron.json` — Separate TS config for electron compilation
 - Build output: `dist/College Calendar Setup 0.1.0.exe` → copy to `public/downloads/college-calendar-setup.exe` for web download
@@ -67,6 +68,34 @@ Static export mode (`output: "export"`) — no server required.
 - Style: `radix-nova`, icon library: `lucide-react`
 - Path aliases: `@/components`, `@/lib`, `@/hooks`
 - Add components: `npx shadcn add <component-name>`
+
+### Live Wallpaper (WorkerW Embedding) — 구현 진행 중
+
+캘린더를 데스크탑 배경화면으로 라이브 표시하는 기능 (Wallpaper Engine과 동일한 WorkerW 임베딩 기법).
+
+**아키텍처:** 두 개의 윈도우 — editorWin(편집용) + wallpaperWin(라이브 표시용, `?liveMode=true`)
+- `electron/win32.ts` — koffi를 통한 Win32 FFI (FindWindowW, SendMessageTimeoutW, EnumWindows, SetParent)
+- `enableLiveMode()` in `electron/main.ts` — async, Progman → 0x052C → WorkerW 탐색 → BrowserWindow 생성 → SetParent로 embed
+- `disableLiveMode()` — SetParent(null)로 detach → wallpaperWin 파괴
+- 5초 주기 health check로 Explorer 재시작 감지 → 자동 re-embed
+- editorWin에서 과제 저장 시 `syncWallpaper` IPC로 wallpaperWin reload
+- 트레이 메뉴에 "Enable/Disable Live Wallpaper" 토글
+- `components/calendar.tsx` — "LIVE WALLPAPER" 토글 버튼 추가, `?liveMode=true` 쿼리 감지 시 transparent/display-only 모드
+- 기존 "SET WALLPAPER" 캡쳐 방식과 공존
+
+**현재 상태 (2026-03-13): embed 테스트 중**
+
+디버깅 경과:
+1. koffi 타입 선언 문제 — `koffi.pointer("HWND", koffi.opaque())` 반환값이 koffi External 객체 → `Buffer.isBuffer()` 항상 실패 → **해결: 모든 HWND를 `'void *'`로 선언**
+2. Progman 찾기/0x052C/SHELLDLL_DefView WorkerW 찾기 성공
+3. 빈 WorkerW 못 찾음 (Windows 11) → **해결: fallback으로 icon WorkerW 자체에 embed**
+4. embed 후에도 전체화면 팝업처럼 동작 (바탕화면 아이콘 뒤에 안 감) → 원인: Electron `getNativeWindowHandle()` Buffer를 koffi `void *`에 직접 넘기면 Buffer 메모리 주소가 넘어감 (HWND 값이 아님) → **해결: `bufferToHwnd()` 함수로 Buffer에서 BigInt로 HWND 값 추출 후 전달**
+
+**koffi FFI 핵심 교훈:**
+- koffi `void *` 반환값: null → JS `null`, 유효 → `[External: ...]` (truthy)
+- koffi `void *` 파라미터에 Buffer 넘기면 Buffer **메모리 주소** 전달 (내용물 X)
+- Electron `getNativeWindowHandle()` Buffer → `readBigUInt64LE(0)` 으로 BigInt 변환 후 전달해야 정확한 HWND 값이 감
+- koffi `void *` 파라미터는 BigInt 값을 raw pointer address로 받아들임
 
 ### Known Issues
 

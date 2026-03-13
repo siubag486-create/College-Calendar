@@ -7,6 +7,10 @@ declare global {
     electronAPI?: {
       captureWallpaper: () => Promise<{ success: boolean; error?: string }>;
       closeWindow: () => void;
+      toggleLiveMode: () => Promise<{ success: boolean; isLive: boolean; error?: string }>;
+      getLiveModeStatus: () => Promise<{ isLive: boolean }>;
+      onLiveModeChanged: (callback: (isLive: boolean) => void) => void;
+      syncWallpaper: () => void;
     };
   }
 }
@@ -74,7 +78,13 @@ const CalendarComponent: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [wallpaperStatus, setWallpaperStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [liveToggleLoading, setLiveToggleLoading] = useState(false);
   const isElectron = typeof window !== "undefined" && !!window.electronAPI;
+
+  // Detect ?liveMode=true → display-only transparent mode
+  const isLiveDisplay = typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("liveMode") === "true";
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -85,6 +95,26 @@ const CalendarComponent: React.FC = () => {
   useEffect(() => {
     setAssignments(loadAssignments());
   }, []);
+
+  // Query live mode status on mount + subscribe to changes
+  useEffect(() => {
+    if (!isElectron || isLiveDisplay) return;
+    window.electronAPI?.getLiveModeStatus().then((status) => {
+      setIsLiveMode(status.isLive);
+    });
+    window.electronAPI?.onLiveModeChanged((isLive) => {
+      setIsLiveMode(isLive);
+    });
+  }, [isElectron, isLiveDisplay]);
+
+  // In live display mode, periodically reload assignments from localStorage
+  useEffect(() => {
+    if (!isLiveDisplay) return;
+    const interval = setInterval(() => {
+      setAssignments(loadAssignments());
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isLiveDisplay]);
 
   const prevMonth = () => {
     if (currentMonth === 0) {
@@ -179,6 +209,8 @@ const CalendarComponent: React.FC = () => {
     const updated = [...assignments, newAssignment];
     setAssignments(updated);
     saveAssignments(updated);
+    // Sync to wallpaper window if live mode is active
+    if (isElectron) window.electronAPI?.syncWallpaper();
     closeOverlay();
   };
 
@@ -190,11 +222,20 @@ const CalendarComponent: React.FC = () => {
     setTimeout(() => setWallpaperStatus("idle"), 3000);
   };
 
+  const handleToggleLive = async () => {
+    if (!window.electronAPI) return;
+    setLiveToggleLoading(true);
+    const result = await window.electronAPI.toggleLiveMode();
+    setIsLiveMode(result.isLive);
+    setLiveToggleLoading(false);
+  };
+
   const handleDeleteAssignment = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const updated = assignments.filter((a) => a.id !== id);
     setAssignments(updated);
     saveAssignments(updated);
+    if (isElectron) window.electronAPI?.syncWallpaper();
   };
 
   const todayStr = formatYMD(today.getFullYear(), today.getMonth(), today.getDate());
@@ -815,59 +856,78 @@ const CalendarComponent: React.FC = () => {
         </filter>
       </svg>
 
-      <div className="cal-root" style={{ opacity }}>
+      <div className="cal-root" style={{ opacity, backgroundColor: isLiveDisplay ? "transparent" : "#0a0a0a" }}>
         {/* Grain overlay */}
         <div className="cal-grain-overlay" />
 
         <div className="cal-container">
           <div className="cal-wrapper">
             {/* Header */}
-            <div className="cal-header">
+            <div className="cal-header" style={isLiveDisplay ? { borderBottom: "none" } : undefined}>
               <div className="cal-header-left">
-                <button className="cal-nav-btn" onClick={prevMonth} aria-label="Previous month">
-                  &#8592;
-                </button>
+                {!isLiveDisplay && (
+                  <button className="cal-nav-btn" onClick={prevMonth} aria-label="Previous month">
+                    &#8592;
+                  </button>
+                )}
                 <div>
                   <span className="cal-month-title">{MONTH_NAMES[currentMonth]}</span>
                   <span className="cal-year">{currentYear}</span>
                 </div>
-                <button className="cal-nav-btn" onClick={nextMonth} aria-label="Next month">
-                  &#8594;
-                </button>
+                {!isLiveDisplay && (
+                  <button className="cal-nav-btn" onClick={nextMonth} aria-label="Next month">
+                    &#8594;
+                  </button>
+                )}
               </div>
 
-              <div className="cal-header-right">
-                {isElectron && (
+              {!isLiveDisplay && (
+                <div className="cal-header-right">
+                  {isElectron && (
+                    <button
+                      className={`cal-wallpaper-btn${isLiveMode ? " done" : ""}`}
+                      onClick={handleToggleLive}
+                      disabled={liveToggleLoading}
+                    >
+                      {liveToggleLoading
+                        ? "..."
+                        : isLiveMode
+                        ? "LIVE ON"
+                        : "LIVE WALLPAPER"}
+                    </button>
+                  )}
+                  {isElectron && (
+                    <button
+                      className={`cal-wallpaper-btn${wallpaperStatus === "done" ? " done" : wallpaperStatus === "error" ? " error" : ""}`}
+                      onClick={handleSetWallpaper}
+                      disabled={wallpaperStatus === "loading"}
+                    >
+                      {wallpaperStatus === "loading"
+                        ? "SETTING..."
+                        : wallpaperStatus === "done"
+                        ? "WALLPAPER SET"
+                        : wallpaperStatus === "error"
+                        ? "FAILED"
+                        : "SET WALLPAPER"}
+                    </button>
+                  )}
                   <button
-                    className={`cal-wallpaper-btn${wallpaperStatus === "done" ? " done" : wallpaperStatus === "error" ? " error" : ""}`}
-                    onClick={handleSetWallpaper}
-                    disabled={wallpaperStatus === "loading"}
+                    className={`cal-edit-btn${editMode ? " active" : ""}`}
+                    onClick={() => setEditMode((v) => !v)}
                   >
-                    {wallpaperStatus === "loading"
-                      ? "SETTING..."
-                      : wallpaperStatus === "done"
-                      ? "WALLPAPER SET"
-                      : wallpaperStatus === "error"
-                      ? "FAILED"
-                      : "SET WALLPAPER"}
+                    {editMode ? "[ LOCK ]" : "[ EDIT ]"}
                   </button>
-                )}
-                <button
-                  className={`cal-edit-btn${editMode ? " active" : ""}`}
-                  onClick={() => setEditMode((v) => !v)}
-                >
-                  {editMode ? "[ LOCK ]" : "[ EDIT ]"}
-                </button>
-                {isElectron && (
-                  <button
-                    className="cal-close-btn"
-                    onClick={() => window.electronAPI?.closeWindow()}
-                    aria-label="Close"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
+                  {isElectron && (
+                    <button
+                      className="cal-close-btn"
+                      onClick={() => window.electronAPI?.closeWindow()}
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Day labels */}
@@ -969,8 +1029,8 @@ const CalendarComponent: React.FC = () => {
               })}
             </div>
 
-            {/* Footer: opacity slider */}
-            <div className="cal-footer">
+            {/* Footer: opacity slider (hidden in live display mode) */}
+            <div className="cal-footer" style={{ display: isLiveDisplay ? "none" : undefined }}>
               <span className="cal-opacity-label">OPACITY</span>
               <input
                 type="range"
