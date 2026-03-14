@@ -12,7 +12,7 @@ import {
 } from "electron";
 import path from "path";
 import { pathToFileURL } from "url";
-import { pinToBottom } from "./win32";
+import { pinToBottom, getForegroundHwnd, hwndFromBuffer } from "./win32";
 
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
@@ -38,6 +38,27 @@ function getOutPath(...segments: string[]): string {
 
 // ── Widget Window (compact, bottom-right, desktop only) ──
 
+let fgWatchTimer: ReturnType<typeof setInterval> | null = null;
+
+function startForegroundWatch(): void {
+  if (fgWatchTimer) clearInterval(fgWatchTimer);
+  if (!widgetWin || widgetWin.isDestroyed()) return;
+
+  const initialFg = getForegroundHwnd();
+
+  fgWatchTimer = setInterval(() => {
+    if (!widgetWin || widgetWin.isDestroyed()) {
+      if (fgWatchTimer) { clearInterval(fgWatchTimer); fgWatchTimer = null; }
+      return;
+    }
+    const fg = getForegroundHwnd();
+    if (fg !== 0n && fg !== initialFg) {
+      widgetWin.setAlwaysOnTop(false);
+      if (fgWatchTimer) { clearInterval(fgWatchTimer); fgWatchTimer = null; }
+    }
+  }, 300);
+}
+
 let lastRestoreTime = 0;
 function restoreWidget(): void {
   const now = Date.now();
@@ -54,7 +75,8 @@ function restoreWidget(): void {
   widgetWin.showInactive();
   setTimeout(() => {
     if (widgetWin && !widgetWin.isDestroyed()) {
-      widgetWin.setAlwaysOnTop(false);
+      widgetWin.setAlwaysOnTop(true, "normal");
+      startForegroundWatch();
     }
   }, 200);
 

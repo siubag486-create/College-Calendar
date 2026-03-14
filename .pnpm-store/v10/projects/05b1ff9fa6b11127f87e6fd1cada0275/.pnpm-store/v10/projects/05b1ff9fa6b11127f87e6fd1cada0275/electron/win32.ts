@@ -6,7 +6,7 @@ const dwmapi = koffi.load("dwmapi.dll");
 const SetWindowPos = user32.func("SetWindowPos", "int", [
   "void *", "void *", "int", "int", "int", "int", "uint32",
 ]);
-const GetForegroundWindow = user32.func("GetForegroundWindow", "void *", []);
+const GetForegroundWindow = user32.func("GetForegroundWindow", "intptr", []);
 const FindWindowA = user32.func("FindWindowA", "void *", ["str", "void *"]);
 const DwmSetWindowAttribute = dwmapi.func("DwmSetWindowAttribute", "int", [
   "void *", "uint32", "void *", "uint32",
@@ -30,9 +30,8 @@ export function hwndFromBuffer(buf: Buffer): bigint {
 
 export function getForegroundHwnd(): bigint {
   try {
-    const hwnd = GetForegroundWindow();
-    if (!hwnd) return 0n;
-    return bufferToHwnd(hwnd as Buffer);
+    const hwnd = GetForegroundWindow() as unknown as bigint;
+    return hwnd ?? 0n;
   } catch {
     return 0n;
   }

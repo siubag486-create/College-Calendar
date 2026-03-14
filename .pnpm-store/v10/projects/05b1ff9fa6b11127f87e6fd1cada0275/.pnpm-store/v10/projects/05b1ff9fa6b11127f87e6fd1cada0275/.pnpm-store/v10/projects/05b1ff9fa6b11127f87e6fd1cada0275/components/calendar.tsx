@@ -166,26 +166,25 @@ const CalendarComponent: React.FC = () => {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&display=swap');
 
+        html, body {
+          height: 100%;
+          overflow: hidden;
+          margin: 0;
+          padding: 0;
+          background: #0a0a0a;
+        }
+
         .cal-root {
           background-color: #0a0a0a;
           color: #e0e0e0;
-          min-height: 100vh;
+          height: 100vh;
           width: 100vw;
           display: flex;
           align-items: center;
           justify-content: center;
           box-sizing: border-box;
           position: relative;
-          overflow-y: auto;
-        }
-
-        .cal-grain-overlay {
-          position: absolute;
-          top: 0; left: 0; width: 100%; height: 100%;
-          pointer-events: none;
-          z-index: 1;
-          opacity: 0.15;
-          filter: url(#cal-grain);
+          overflow: hidden;
         }
 
         .cal-container {
@@ -332,7 +331,7 @@ const CalendarComponent: React.FC = () => {
           position: relative;
           border-right: 1px solid rgba(224, 224, 224, 0.1);
           border-bottom: 1px solid rgba(224, 224, 224, 0.1);
-          min-height: 120px;
+          min-height: 80px;
           padding: 0.35rem;
           box-sizing: border-box;
           transition: background 0.15s;
@@ -670,16 +669,7 @@ const CalendarComponent: React.FC = () => {
         }
       `}</style>
 
-      {/* Hidden SVG grain filter */}
-      <svg style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}>
-        <filter id="cal-grain">
-          <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" />
-          <feColorMatrix type="saturate" values="0" />
-        </filter>
-      </svg>
-
       <div className="cal-root">
-        <div className="cal-grain-overlay" />
 
         <div className="cal-container">
           <div className="cal-wrapper">
