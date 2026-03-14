@@ -168,20 +168,23 @@ const CalendarComponent: React.FC = () => {
 
         html, body {
           height: 100%;
+          width: 100%;
           overflow: hidden;
+          overscroll-behavior: none;
           margin: 0;
           padding: 0;
-          background: #0a0a0a;
+          background: #000;
         }
 
         .cal-root {
-          background-color: #0a0a0a;
+          background-color: #000;
           color: #e0e0e0;
-          height: 100vh;
+          height: 100dvh;
           width: 100vw;
           display: flex;
-          align-items: center;
+          align-items: stretch;
           justify-content: center;
+          padding: 2rem 2.25rem;
           box-sizing: border-box;
           position: relative;
           overflow: hidden;
@@ -190,16 +193,27 @@ const CalendarComponent: React.FC = () => {
         .cal-container {
           position: relative;
           z-index: 2;
-          width: 90vw;
-          max-width: 1200px;
-          padding: 2rem;
+          width: min(100%, 1200px);
+          height: 100%;
+          padding: 0;
           box-sizing: border-box;
-          transform: scale(0.8);
-          transform-origin: center center;
+          display: flex;
+          background: #000;
+          border: 1px solid rgba(224, 224, 224, 0.08);
+          border-radius: 40px;
+          box-shadow: 0 24px 72px rgba(0, 0, 0, 0.38);
+          overflow: hidden;
         }
 
         .cal-wrapper {
           width: 100%;
+          min-width: 0;
+          min-height: 0;
+          display: grid;
+          grid-template-rows: auto auto minmax(0, 1fr);
+          row-gap: 0.35rem;
+          padding: 1.1rem 1.2rem 1.2rem;
+          box-sizing: border-box;
         }
 
         /* Header */
@@ -207,8 +221,9 @@ const CalendarComponent: React.FC = () => {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 2rem;
-          padding-bottom: 1.25rem;
+          gap: 1rem;
+          margin-bottom: 0;
+          padding-bottom: 0.9rem;
           border-bottom: 1px solid rgba(224, 224, 224, 0.1);
           -webkit-app-region: drag;
         }
@@ -223,6 +238,7 @@ const CalendarComponent: React.FC = () => {
         .cal-close-btn {
           background: none;
           border: 1px solid rgba(224, 224, 224, 0.15);
+          border-radius: 14px;
           color: rgba(224, 224, 224, 0.4);
           font-family: monospace;
           font-size: 0.75rem;
@@ -306,7 +322,7 @@ const CalendarComponent: React.FC = () => {
         .cal-day-labels {
           display: grid;
           grid-template-columns: repeat(7, 1fr);
-          margin-bottom: 0.25rem;
+          margin-bottom: 0;
         }
 
         .cal-day-label {
@@ -322,17 +338,19 @@ const CalendarComponent: React.FC = () => {
         /* Grid */
         .cal-grid {
           display: grid;
-          grid-template-columns: repeat(7, 1fr);
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+          grid-template-rows: repeat(6, minmax(0, 1fr));
           border-left: 1px solid rgba(224, 224, 224, 0.1);
           border-top: 1px solid rgba(224, 224, 224, 0.1);
+          min-height: 0;
         }
 
         .cal-cell {
           position: relative;
           border-right: 1px solid rgba(224, 224, 224, 0.1);
           border-bottom: 1px solid rgba(224, 224, 224, 0.1);
-          min-height: 80px;
-          padding: 0.35rem;
+          min-height: 0;
+          padding: 0.5rem 0.4rem 0.35rem;
           box-sizing: border-box;
           transition: background 0.15s;
           overflow: hidden;
@@ -666,6 +684,68 @@ const CalendarComponent: React.FC = () => {
           color: rgba(224, 224, 224, 0.35);
           margin-bottom: 1rem;
           text-transform: uppercase;
+        }
+
+        @media (max-height: 860px) {
+          .cal-root {
+            padding: 1.35rem 1.5rem;
+          }
+
+          .cal-container {
+            border-radius: 32px;
+          }
+
+          .cal-wrapper {
+            padding: 0.9rem 1rem 1rem;
+          }
+
+          .cal-header {
+            padding-bottom: 0.75rem;
+          }
+
+          .cal-month-title {
+            font-size: clamp(1rem, 2.3vw, 1.5rem);
+          }
+
+          .cal-year {
+            font-size: 0.75rem;
+          }
+
+          .cal-day-label {
+            padding: 0.25rem 0;
+          }
+
+          .cal-cell {
+            padding: 0.4rem 0.3rem 0.25rem;
+          }
+
+          .cal-date-num {
+            top: 0.3rem;
+            right: 0.35rem;
+            font-size: 0.75rem;
+          }
+
+          .cal-dday-label {
+            top: 0.3rem;
+            left: 0.3rem;
+            font-size: 0.52rem;
+          }
+
+          .cal-assignment-name {
+            font-size: 0.5rem;
+          }
+        }
+
+        @media (max-width: 920px) {
+          .cal-header {
+            flex-wrap: wrap;
+            align-items: flex-start;
+          }
+
+          .cal-header-right {
+            width: 100%;
+            justify-content: flex-end;
+          }
         }
       `}</style>
 

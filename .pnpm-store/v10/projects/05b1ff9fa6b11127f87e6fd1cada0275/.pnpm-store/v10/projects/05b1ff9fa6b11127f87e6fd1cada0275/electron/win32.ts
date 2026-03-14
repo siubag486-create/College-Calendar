@@ -7,6 +7,9 @@ const SetWindowPos = user32.func("SetWindowPos", "int", [
   "void *", "void *", "int", "int", "int", "int", "uint32",
 ]);
 const GetForegroundWindow = user32.func("GetForegroundWindow", "intptr", []);
+const GetClassNameW = user32.func("GetClassNameW", "int", [
+  "void *", "char16_t *", "int",
+]);
 const FindWindowA = user32.func("FindWindowA", "void *", ["str", "void *"]);
 const DwmSetWindowAttribute = dwmapi.func("DwmSetWindowAttribute", "int", [
   "void *", "uint32", "void *", "uint32",
@@ -17,6 +20,12 @@ const SWP_NOSIZE     = 0x0001;
 const SWP_NOACTIVATE = 0x0010;
 const HWND_BOTTOM    = 1n;
 const DWMWA_CLOAK    = 13;
+const DESKTOP_SHELL_CLASSES = new Set([
+  "Progman",
+  "WorkerW",
+  "Shell_TrayWnd",
+  "NotifyIconOverflowWindow",
+]);
 
 function bufferToHwnd(buf: Buffer): bigint {
   return buf.length >= 8
@@ -35,6 +44,24 @@ export function getForegroundHwnd(): bigint {
   } catch {
     return 0n;
   }
+}
+
+export function getWindowClassName(hwnd: bigint): string | null {
+  if (hwnd === 0n) return null;
+
+  try {
+    const buf = Buffer.alloc(256 * 2);
+    const length = GetClassNameW(hwnd, buf, buf.length / 2) as number;
+    if (!length) return null;
+    return koffi.decode(buf, "char16", length) as string;
+  } catch {
+    return null;
+  }
+}
+
+export function isDesktopShellWindow(hwnd: bigint): boolean {
+  const className = getWindowClassName(hwnd);
+  return className ? DESKTOP_SHELL_CLASSES.has(className) : false;
 }
 
 export function pinToBottom(electronHWND: Buffer): void {

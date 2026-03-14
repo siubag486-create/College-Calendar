@@ -12,13 +12,27 @@ import {
 } from "electron";
 import path from "path";
 import { pathToFileURL } from "url";
-import { pinToBottom, getForegroundHwnd, hwndFromBuffer } from "./win32";
+import {
+  getForegroundHwnd,
+  hwndFromBuffer,
+  isDesktopShellWindow,
+  pinToBottom,
+  uncloak,
+} from "./win32";
 
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
+app.setName("College Calendar");
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.pswk.college-calendar");
+}
 
 let tray: Tray | null = null;
 let widgetWin: BrowserWindow | null = null;
 let editorWin: BrowserWindow | null = null;
+let widgetLoaded = false;
+let pendingWidgetRestore = false;
+let fgWatchTimer: ReturnType<typeof setInterval> | null = null;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -36,54 +50,85 @@ function getOutPath(...segments: string[]): string {
   return path.join(__dirname, "..", "out", ...segments);
 }
 
-// ── Widget Window (compact, bottom-right, desktop only) ──
+// Widget window
 
-let fgWatchTimer: ReturnType<typeof setInterval> | null = null;
+function stopForegroundWatch(): void {
+  if (fgWatchTimer) {
+    clearInterval(fgWatchTimer);
+    fgWatchTimer = null;
+  }
+}
+
+function showWidgetOnDesktop(): void {
+  if (!widgetWin || widgetWin.isDestroyed()) return;
+  stopForegroundWatch();
+  widgetWin.showInactive();
+  pinToBottom(widgetWin.getNativeWindowHandle());
+}
 
 function startForegroundWatch(): void {
-  if (fgWatchTimer) clearInterval(fgWatchTimer);
-  if (!widgetWin || widgetWin.isDestroyed()) return;
-
-  const initialFg = getForegroundHwnd();
+  stopForegroundWatch();
 
   fgWatchTimer = setInterval(() => {
     if (!widgetWin || widgetWin.isDestroyed()) {
-      if (fgWatchTimer) { clearInterval(fgWatchTimer); fgWatchTimer = null; }
+      stopForegroundWatch();
       return;
     }
-    const fg = getForegroundHwnd();
-    if (fg !== 0n && fg !== initialFg) {
-      widgetWin.setAlwaysOnTop(false);
-      if (fgWatchTimer) { clearInterval(fgWatchTimer); fgWatchTimer = null; }
+
+    const foregroundHwnd = getForegroundHwnd();
+    const widgetHwnd = hwndFromBuffer(widgetWin.getNativeWindowHandle());
+
+    if (
+      foregroundHwnd === 0n ||
+      foregroundHwnd === widgetHwnd ||
+      isDesktopShellWindow(foregroundHwnd)
+    ) {
+      return;
     }
-  }, 300);
+
+    widgetWin.setAlwaysOnTop(false);
+    stopForegroundWatch();
+  }, 250);
 }
 
-let lastRestoreTime = 0;
-function restoreWidget(): void {
-  const now = Date.now();
-  if (now - lastRestoreTime < 500) return; // key repeat 방지
-  lastRestoreTime = now;
-
+function restoreWidgetWindow(): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
   if (widgetWin.isMinimized()) widgetWin.restore();
 
-  // alwaysOnTop으로 Win+D 클로킹 뚫고 보이게 한 뒤
-  // 바로 해제 → 일반 z-order로 내려감
-  // focusable:false라 앱 클릭하면 앱이 위로 올라가 위젯이 자연히 가려짐
+  stopForegroundWatch();
   widgetWin.setAlwaysOnTop(true, "screen-saver");
-  widgetWin.showInactive();
+  widgetWin.show();
+  widgetWin.focus();
+  uncloak(widgetWin.getNativeWindowHandle());
   setTimeout(() => {
     if (widgetWin && !widgetWin.isDestroyed()) {
       widgetWin.setAlwaysOnTop(true, "normal");
       startForegroundWatch();
     }
   }, 200);
+}
 
+let lastRestoreTime = 0;
+function restoreWidget(): void {
+  const now = Date.now();
+  if (now - lastRestoreTime < 500) return;
+  lastRestoreTime = now;
+
+  if (!widgetWin || widgetWin.isDestroyed()) return;
+  if (!widgetLoaded) {
+    pendingWidgetRestore = true;
+    console.log("[widget] restore requested before load finished");
+    return;
+  }
+
+  restoreWidgetWindow();
   console.log("[widget] restored via Alt+W");
 }
 
 function createWidgetWindow(): void {
+  widgetLoaded = false;
+  pendingWidgetRestore = false;
+
   const display = screen.getPrimaryDisplay();
   const { width: screenW, height: screenH } = display.workAreaSize;
 
@@ -96,17 +141,18 @@ function createWidgetWindow(): void {
     x: screenW - widgetW - 16,
     y: screenH - widgetH - 16,
     frame: false,
-    transparent: false,
-    backgroundColor: "#141414",
+    transparent: true,
+    backgroundColor: "#00000000",
     skipTaskbar: true,
     resizable: false,
     alwaysOnTop: false,
-    focusable: false,
+    focusable: true,
     show: false,
     hasShadow: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      backgroundThrottling: false,
       preload: path.join(__dirname, "preload.js"),
     },
   });
@@ -118,33 +164,50 @@ function createWidgetWindow(): void {
   });
   widgetWin.webContents.on("did-finish-load", () => {
     console.log("[widget] page loaded OK");
+    widgetLoaded = true;
+
+    if (pendingWidgetRestore) {
+      pendingWidgetRestore = false;
+      restoreWidgetWindow();
+      console.log("[widget] restored after load finished");
+      return;
+    }
+
+    showWidgetOnDesktop();
   });
 
-  // Block regular minimize events
   (widgetWin as any).on("minimize", (e: Event & { preventDefault: () => void }) => {
     e.preventDefault();
     if (widgetWin && !widgetWin.isDestroyed()) {
-      widgetWin.showInactive();
-      pinToBottom(widgetWin.getNativeWindowHandle());
+      showWidgetOnDesktop();
     }
   });
 
   widgetWin.once("ready-to-show", () => {
     console.log("[widget] ready-to-show fired");
-    if (!widgetWin) return;
-    widgetWin.showInactive();
-    pinToBottom(widgetWin.getNativeWindowHandle());
   });
 
   widgetWin.on("closed", () => {
+    stopForegroundWatch();
     widgetWin = null;
+    widgetLoaded = false;
+    pendingWidgetRestore = false;
   });
 }
 
-// ── Editor Window (full calendar, center, popup) ──
+// Editor window
 
 function createEditorWindow(): void {
+  stopForegroundWatch();
+
+  if (widgetWin && !widgetWin.isDestroyed()) {
+    widgetWin.setAlwaysOnTop(false);
+  }
+
   if (editorWin && !editorWin.isDestroyed()) {
+    if (editorWin.isMinimized()) editorWin.restore();
+    if (!editorWin.isVisible()) editorWin.show();
+    editorWin.moveTop();
     editorWin.focus();
     return;
   }
@@ -161,8 +224,9 @@ function createEditorWindow(): void {
     x: Math.round((screenW - editorW) / 2),
     y: Math.round((screenH - editorH) / 2),
     frame: false,
+    roundedCorners: true,
     transparent: false,
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#000000",
     skipTaskbar: false,
     resizable: true,
     show: false,
@@ -175,6 +239,8 @@ function createEditorWindow(): void {
   });
 
   editorWin.loadURL("app://host/calendar/index.html");
+  editorWin.show();
+  editorWin.moveTop();
 
   editorWin.webContents.on("did-fail-load", (_e, code, desc) => {
     console.error("[editor] load failed:", code, desc);
@@ -183,6 +249,16 @@ function createEditorWindow(): void {
   editorWin.once("ready-to-show", () => {
     console.log("[editor] ready-to-show fired");
     editorWin?.show();
+    editorWin?.moveTop();
+    editorWin?.focus();
+  });
+
+  editorWin.webContents.once("did-finish-load", () => {
+    if (editorWin && !editorWin.isDestroyed() && !editorWin.isVisible()) {
+      editorWin.show();
+      editorWin.moveTop();
+      editorWin.focus();
+    }
   });
 
   editorWin.on("closed", () => {
@@ -196,7 +272,19 @@ function closeEditorWindow(): void {
   }
 }
 
-// ── Tray ──
+function focusExistingApp(): void {
+  if (editorWin && !editorWin.isDestroyed()) {
+    if (editorWin.isMinimized()) editorWin.restore();
+    if (!editorWin.isVisible()) editorWin.show();
+    editorWin.moveTop();
+    editorWin.focus();
+    return;
+  }
+
+  restoreWidget();
+}
+
+// Tray
 
 function createTray(): void {
   const icon = nativeImage.createFromDataURL(
@@ -204,7 +292,7 @@ function createTray(): void {
   );
 
   tray = new Tray(icon);
-  tray.setToolTip("College Calendar  |  Alt+W: 위젯 복원");
+  tray.setToolTip("College Calendar  |  Alt+W: restore widget");
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -212,7 +300,7 @@ function createTray(): void {
       click: () => createEditorWindow(),
     },
     {
-      label: "위젯 복원 (Alt+W)",
+      label: "Restore Widget (Alt+W)",
       click: () => restoreWidget(),
     },
     { type: "separator" },
@@ -226,7 +314,6 @@ function createTray(): void {
   ]);
   tray.setContextMenu(contextMenu);
 
-  // Left-click → toggle editor
   tray.on("click", () => {
     if (editorWin && !editorWin.isDestroyed()) {
       closeEditorWindow();
@@ -236,7 +323,7 @@ function createTray(): void {
   });
 }
 
-// ── IPC ──
+// IPC
 
 ipcMain.on("open-editor", () => {
   createEditorWindow();
@@ -255,7 +342,15 @@ ipcMain.on("assignments-changed", () => {
   }
 });
 
-// ── App Lifecycle ──
+// App lifecycle
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+app.on("second-instance", () => {
+  focusExistingApp();
+});
 
 app.whenReady().then(() => {
   console.log("[main] app ready");
@@ -267,14 +362,13 @@ app.whenReady().then(() => {
       filePath = filePath.substring(1);
     }
     const fullPath = getOutPath(filePath);
-    console.log("[protocol]", request.url, "→", fullPath);
+    console.log("[protocol]", request.url, "->", fullPath);
     return net.fetch(pathToFileURL(fullPath).toString());
   });
 
   createWidgetWindow();
   createTray();
 
-  // Alt+W → 위젯 복원 (Win+D로 사라진 경우 등)
   globalShortcut.register("Alt+W", () => {
     restoreWidget();
   });
