@@ -53,13 +53,13 @@ Static export mode (`output: "export"`) — no server required.
 
 - `electron/main.ts` — Widget window (240x300, bottom-right, `focusable:false`, `skipTaskbar:true`) + Editor window (1000x800, center popup). Tray with left-click toggle editor, right-click menu.
 - `electron/preload.ts` — IPC bridge (`openEditor`, `closeEditor`, `notifyAssignmentsChanged`, `onAssignmentsChanged`)
-- `electron/win32.ts` — Win32 FFI via koffi: `pinToBottom()` sets HWND_BOTTOM z-order
+- `electron/win32.ts` — Win32 FFI via koffi (user32.dll + dwmapi.dll): `pinToBottom()` HWND_BOTTOM, `pinAboveDesktop()` Progman 위 고정, `uncloak()` DWM 클로킹 해제
 - `electron-builder.yml` — NSIS installer config
 - `tsconfig.electron.json` — Separate TS config for electron compilation
 - `scripts/electron-dev.cjs` — async build runner (next build → tsc → electron)
 - Build output: `dist/College Calendar Setup 0.1.0.exe` → copy to `public/downloads/college-calendar-setup.exe` for web download
 - App flow: install .exe → widget visible bottom-right on desktop (hidden behind apps) → click/tray to open editor → edit assignments → widget remains
-- Widget z-order: `pinToBottom` (HWND_BOTTOM) + `minimize` event block + 500ms recovery timer to survive Win+D
+- Widget z-order: 시작 시 `pinToBottom` (HWND_BOTTOM) + `minimize` event block. Alt+W 복원 시 `alwaysOnTop(true)` → 200ms 후 `alwaysOnTop(false)` (일반 z-order, focusable:false로 앱 클릭 시 자연히 뒤로)
 - localStorage shared between widget and editor via same `app://` origin; IPC `assignments-changed` syncs changes
 
 ### Styling

@@ -47,10 +47,16 @@ function restoreWidget(): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
   if (widgetWin.isMinimized()) widgetWin.restore();
 
-  // Win+D는 DWM 클로킹으로 창을 숨김 — alwaysOnTop(true)으로만 뚫림.
-  // pinToBottom으로 되돌리면 Win+D 상태에서 다시 사라지므로 유지.
+  // alwaysOnTop으로 Win+D 클로킹 뚫고 보이게 한 뒤
+  // 바로 해제 → 일반 z-order로 내려감
+  // focusable:false라 앱 클릭하면 앱이 위로 올라가 위젯이 자연히 가려짐
   widgetWin.setAlwaysOnTop(true, "screen-saver");
   widgetWin.showInactive();
+  setTimeout(() => {
+    if (widgetWin && !widgetWin.isDestroyed()) {
+      widgetWin.setAlwaysOnTop(false);
+    }
+  }, 200);
 
   console.log("[widget] restored via Alt+W");
 }
