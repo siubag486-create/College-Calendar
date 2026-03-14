@@ -8,6 +8,7 @@ import {
   Menu,
   protocol,
   net,
+  globalShortcut,
 } from "electron";
 import path from "path";
 import { pathToFileURL } from "url";
@@ -36,6 +37,23 @@ function getOutPath(...segments: string[]): string {
 }
 
 // ── Widget Window (compact, bottom-right, desktop only) ──
+
+let lastRestoreTime = 0;
+function restoreWidget(): void {
+  const now = Date.now();
+  if (now - lastRestoreTime < 500) return; // key repeat 방지
+  lastRestoreTime = now;
+
+  if (!widgetWin || widgetWin.isDestroyed()) return;
+  if (widgetWin.isMinimized()) widgetWin.restore();
+
+  // Win+D는 DWM 클로킹으로 창을 숨김 — alwaysOnTop(true)으로만 뚫림.
+  // pinToBottom으로 되돌리면 Win+D 상태에서 다시 사라지므로 유지.
+  widgetWin.setAlwaysOnTop(true, "screen-saver");
+  widgetWin.showInactive();
+
+  console.log("[widget] restored via Alt+W");
+}
 
 function createWidgetWindow(): void {
   const display = screen.getPrimaryDisplay();
@@ -74,7 +92,7 @@ function createWidgetWindow(): void {
     console.log("[widget] page loaded OK");
   });
 
-  // Block Win+D from minimizing the widget
+  // Block regular minimize events
   (widgetWin as any).on("minimize", (e: Event & { preventDefault: () => void }) => {
     e.preventDefault();
     if (widgetWin && !widgetWin.isDestroyed()) {
@@ -90,23 +108,8 @@ function createWidgetWindow(): void {
     pinToBottom(widgetWin.getNativeWindowHandle());
   });
 
-  // Fallback: periodically check if Win+D hid/minimized the widget and recover
-  const recovery = setInterval(() => {
-    if (!widgetWin || widgetWin.isDestroyed()) {
-      clearInterval(recovery);
-      return;
-    }
-    if (widgetWin.isMinimized() || !widgetWin.isVisible()) {
-      console.log("[widget] recovered from hide/minimize (Win+D?)");
-      widgetWin.restore();
-      widgetWin.showInactive();
-      pinToBottom(widgetWin.getNativeWindowHandle());
-    }
-  }, 500);
-
   widgetWin.on("closed", () => {
     widgetWin = null;
-    clearInterval(recovery);
   });
 }
 
@@ -173,12 +176,16 @@ function createTray(): void {
   );
 
   tray = new Tray(icon);
-  tray.setToolTip("College Calendar");
+  tray.setToolTip("College Calendar  |  Alt+W: 위젯 복원");
 
   const contextMenu = Menu.buildFromTemplate([
     {
       label: "Open Editor",
       click: () => createEditorWindow(),
+    },
+    {
+      label: "위젯 복원 (Alt+W)",
+      click: () => restoreWidget(),
     },
     { type: "separator" },
     {
@@ -238,7 +245,17 @@ app.whenReady().then(() => {
 
   createWidgetWindow();
   createTray();
-  console.log("[main] widget + tray created");
+
+  // Alt+W → 위젯 복원 (Win+D로 사라진 경우 등)
+  globalShortcut.register("Alt+W", () => {
+    restoreWidget();
+  });
+
+  console.log("[main] widget + tray created, Alt+W registered");
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {});

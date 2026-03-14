@@ -6,6 +6,8 @@ const SetWindowPos = user32.func("SetWindowPos", "int", [
   "void *", "void *", "int", "int", "int", "int", "uint32",
 ]);
 
+const GetForegroundWindow = user32.func("GetForegroundWindow", "void *", []);
+
 const SWP_NOMOVE     = 0x0002;
 const SWP_NOSIZE     = 0x0001;
 const SWP_NOACTIVATE = 0x0010;
@@ -15,6 +17,20 @@ function bufferToHwnd(buf: Buffer): bigint {
   return buf.length >= 8
     ? buf.readBigUInt64LE(0)
     : BigInt(buf.readUInt32LE(0));
+}
+
+export function hwndFromBuffer(buf: Buffer): bigint {
+  return bufferToHwnd(buf);
+}
+
+export function getForegroundHwnd(): bigint {
+  try {
+    const hwnd = GetForegroundWindow();
+    if (!hwnd) return 0n;
+    return bufferToHwnd(hwnd as Buffer);
+  } catch {
+    return 0n;
+  }
 }
 
 export function pinToBottom(electronHWND: Buffer): void {
