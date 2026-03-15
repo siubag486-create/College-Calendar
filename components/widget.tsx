@@ -205,7 +205,7 @@ const WidgetComponent: React.FC = () => {
           flex-direction: column;
           background: var(--widget-bg);
           border: 1px solid var(--widget-border);
-          border-radius: 16px;
+          border-radius: 24px;
           box-sizing: border-box;
           overflow: hidden;
           position: relative;
@@ -243,7 +243,7 @@ const WidgetComponent: React.FC = () => {
           --item-hover: rgba(0, 0, 0, 0.04);
           --name-color: rgba(0, 0, 0, 0.75);
           --time-color: rgba(0, 0, 0, 0.74);
-          --empty-color: rgba(0, 0, 0, 0.35);
+          --empty-color: rgba(0, 0, 0, 0.74);
           --scrollbar-thumb: rgba(0, 0, 0, 0.12);
           --button-bg: rgba(0, 0, 0, 0.05);
           --button-border: rgba(0, 0, 0, 0.12);
@@ -262,7 +262,6 @@ const WidgetComponent: React.FC = () => {
         .widget-root.mode-glass .widget-panel {
           backdrop-filter: blur(30px) saturate(140%);
           -webkit-backdrop-filter: blur(30px) saturate(140%);
-          border-radius: 24px;
         }
 
         .widget-root.mode-glass .widget-subtitle,
@@ -278,6 +277,11 @@ const WidgetComponent: React.FC = () => {
         .widget-root.mode-glass .widget-date-label,
         .widget-root.mode-glass .widget-date-time {
           font-weight: 600;
+        }
+
+        .widget-root.mode-glass .widget-empty {
+          font-weight: 600;
+          text-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
         }
 
         .widget-header {
@@ -401,13 +405,10 @@ const WidgetComponent: React.FC = () => {
           padding: 7px 5px 7px 12px;
           margin: 0 8px;
           border-radius: 12px;
+          border: 1px solid transparent;
           transition:
             background 0.12s,
             border-color 0.12s;
-        }
-
-        .widget-root.mode-glass .widget-item {
-          border: 1px solid transparent;
         }
 
         .widget-item:hover {
