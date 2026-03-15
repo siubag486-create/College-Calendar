@@ -17,7 +17,8 @@ import {
   hwndFromBuffer,
   isDesktopShellWindow,
   pinAboveDesktop,
-  pinToBottom,
+  restoreWindow,
+  settleAboveDesktop,
   uncloak,
 } from "./win32";
 
@@ -32,7 +33,8 @@ let widgetWin: BrowserWindow | null = null;
 let editorWin: BrowserWindow | null = null;
 let widgetLoaded = false;
 let pendingWidgetRestore = false;
-let fgWatchTimer: ReturnType<typeof setInterval> | null = null;
+let visibilityWatchTimer: ReturnType<typeof setInterval> | null = null;
+let widgetVisible = false;
 const isDevElectronRun = process.env.COLLEGE_WIDGET_DEV === "1";
 const devServerUrl = process.env.COLLEGE_DEV_SERVER_URL || "";
 const hasSingleInstanceLock = isDevElectronRun ? true : app.requestSingleInstanceLock();
@@ -55,61 +57,76 @@ function getOutPath(...segments: string[]): string {
 
 // Widget window
 
-function stopForegroundWatch(): void {
-  if (fgWatchTimer) {
-    clearInterval(fgWatchTimer);
-    fgWatchTimer = null;
+function stopVisibilityWatch(): void {
+  if (visibilityWatchTimer) {
+    clearInterval(visibilityWatchTimer);
+    visibilityWatchTimer = null;
   }
 }
 
-function showWidgetOnDesktop(): void {
-  if (!widgetWin || widgetWin.isDestroyed()) return;
-  stopForegroundWatch();
-  widgetWin.showInactive();
-  pinToBottom(widgetWin.getNativeWindowHandle());
+function isDesktopContext(): boolean {
+  if (!widgetWin || widgetWin.isDestroyed()) return false;
+
+  const foregroundHwnd = getForegroundHwnd();
+  const widgetHwnd = hwndFromBuffer(widgetWin.getNativeWindowHandle());
+
+  return (
+    foregroundHwnd === 0n ||
+    foregroundHwnd === widgetHwnd ||
+    isDesktopShellWindow(foregroundHwnd)
+  );
 }
 
-function startForegroundWatch(): void {
-  stopForegroundWatch();
+function showWidgetPinnedToDesktop(): void {
+  if (!widgetWin || widgetWin.isDestroyed()) return;
+  const handle = widgetWin.getNativeWindowHandle();
+  restoreWindow(handle);
+  settleAboveDesktop(handle);
+  pinAboveDesktop(handle);
+  widgetWin.showInactive();
+  uncloak(handle);
+  widgetVisible = true;
+}
 
-  fgWatchTimer = setInterval(() => {
+function hideWidgetForApps(): void {
+  if (!widgetWin || widgetWin.isDestroyed()) return;
+  if (widgetWin.isVisible()) {
+    widgetWin.hide();
+  }
+  widgetVisible = false;
+}
+
+function syncWidgetVisibility(forceRestore = false): void {
+  if (!widgetWin || widgetWin.isDestroyed()) return;
+
+  if (forceRestore || isDesktopContext()) {
+    if (forceRestore || !widgetVisible || !widgetWin.isVisible()) {
+      showWidgetPinnedToDesktop();
+    }
+    return;
+  }
+
+  if (widgetVisible || widgetWin.isVisible()) {
+    hideWidgetForApps();
+  }
+}
+
+function startVisibilityWatch(): void {
+  stopVisibilityWatch();
+  visibilityWatchTimer = setInterval(() => {
     if (!widgetWin || widgetWin.isDestroyed()) {
-      stopForegroundWatch();
+      stopVisibilityWatch();
       return;
     }
-
-    const foregroundHwnd = getForegroundHwnd();
-    const widgetHwnd = hwndFromBuffer(widgetWin.getNativeWindowHandle());
-
-    if (
-      foregroundHwnd === 0n ||
-      foregroundHwnd === widgetHwnd ||
-      isDesktopShellWindow(foregroundHwnd)
-    ) {
-      return;
-    }
-
-    widgetWin.setAlwaysOnTop(false);
-    pinAboveDesktop(widgetWin.getNativeWindowHandle());
-    stopForegroundWatch();
-  }, 250);
+    syncWidgetVisibility();
+  }, 150);
 }
 
 function restoreWidgetWindow(): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
   if (widgetWin.isMinimized()) widgetWin.restore();
-
-  stopForegroundWatch();
-  widgetWin.setAlwaysOnTop(true, "screen-saver");
-  widgetWin.show();
-  widgetWin.focus();
-  uncloak(widgetWin.getNativeWindowHandle());
-  setTimeout(() => {
-    if (widgetWin && !widgetWin.isDestroyed()) {
-      widgetWin.setAlwaysOnTop(true, "normal");
-      startForegroundWatch();
-    }
-  }, 200);
+  syncWidgetVisibility(true);
+  startVisibilityWatch();
 }
 
 let lastRestoreTime = 0;
@@ -181,14 +198,17 @@ function createWidgetWindow(): void {
       return;
     }
 
-    showWidgetOnDesktop();
+    syncWidgetVisibility(true);
+    startVisibilityWatch();
   });
 
-  (widgetWin as any).on("minimize", (e: Event & { preventDefault: () => void }) => {
+  const widgetWindowEvents = widgetWin as unknown as {
+    on: (event: string, listener: (event: Event & { preventDefault: () => void }) => void) => void;
+  };
+
+  widgetWindowEvents.on("minimize", (e: Event & { preventDefault: () => void }) => {
     e.preventDefault();
-    if (widgetWin && !widgetWin.isDestroyed()) {
-      showWidgetOnDesktop();
-    }
+    syncWidgetVisibility();
   });
 
   widgetWin.once("ready-to-show", () => {
@@ -196,20 +216,19 @@ function createWidgetWindow(): void {
   });
 
   widgetWin.on("closed", () => {
-    stopForegroundWatch();
+    stopVisibilityWatch();
     widgetWin = null;
     widgetLoaded = false;
     pendingWidgetRestore = false;
+    widgetVisible = false;
   });
 }
 
 // Editor window
 
 function createEditorWindow(): void {
-  stopForegroundWatch();
-
   if (widgetWin && !widgetWin.isDestroyed()) {
-    widgetWin.setAlwaysOnTop(false);
+    hideWidgetForApps();
   }
 
   if (editorWin && !editorWin.isDestroyed()) {

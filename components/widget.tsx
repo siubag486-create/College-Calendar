@@ -50,7 +50,7 @@ function getDateLabel(dateStr: string): string {
 function getDdayBadge(diff: number): string | null {
   if (diff < 0) return null;
   if (diff === 0) return "D-0";
-  if (diff <= 7) return `D-${diff}`;
+  if (diff <= 30) return `D-${diff}`;
   return null;
 }
 
@@ -174,7 +174,7 @@ const WidgetComponent: React.FC = () => {
           height: 100vh;
           color: var(--title-color);
           display: flex;
-          font-family: 'Do Hyeon', monospace;
+          font-family: "Nanum Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
           -webkit-text-stroke: 0.3px transparent;
           letter-spacing: 0.02em;
           cursor: pointer;
@@ -237,12 +237,12 @@ const WidgetComponent: React.FC = () => {
             0 1px 3px rgba(0, 0, 0, 0.08);
           --widget-overlay: none;
           --title-color: rgba(0, 0, 0, 0.88);
-          --subtitle-color: rgba(0, 0, 0, 0.45);
-          --date-color: rgba(0, 0, 0, 0.40);
+          --subtitle-color: rgba(0, 0, 0, 0.76);
+          --date-color: rgba(0, 0, 0, 0.80);
           --today-color: #ff3c00;
           --item-hover: rgba(0, 0, 0, 0.04);
           --name-color: rgba(0, 0, 0, 0.75);
-          --time-color: rgba(0, 0, 0, 0.40);
+          --time-color: rgba(0, 0, 0, 0.74);
           --empty-color: rgba(0, 0, 0, 0.35);
           --scrollbar-thumb: rgba(0, 0, 0, 0.12);
           --button-bg: rgba(0, 0, 0, 0.05);
@@ -263,6 +263,21 @@ const WidgetComponent: React.FC = () => {
           backdrop-filter: blur(30px) saturate(140%);
           -webkit-backdrop-filter: blur(30px) saturate(140%);
           border-radius: 24px;
+        }
+
+        .widget-root.mode-glass .widget-subtitle,
+        .widget-root.mode-glass .widget-date-label,
+        .widget-root.mode-glass .widget-date-time {
+          text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
+        }
+
+        .widget-root.mode-glass .widget-subtitle {
+          font-weight: 700;
+        }
+
+        .widget-root.mode-glass .widget-date-label,
+        .widget-root.mode-glass .widget-date-time {
+          font-weight: 600;
         }
 
         .widget-header {
@@ -343,24 +358,47 @@ const WidgetComponent: React.FC = () => {
           margin-bottom: 4px;
         }
 
-        .widget-date-label {
-          font-size: 0.5rem;
-          letter-spacing: 0.16em;
+        .widget-date-header {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 6px;
           color: var(--date-color);
           padding: 4px 16px 2px;
-          text-transform: uppercase;
           transition: color 0.4s ease;
         }
 
-        .widget-date-label.is-today {
+        .widget-date-header.is-today {
           color: var(--today-color);
         }
 
+        .widget-date-label {
+          font-size: 0.5rem;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          white-space: nowrap;
+          color: inherit;
+        }
+
+        .widget-date-time {
+          font-size: 0.5rem;
+          letter-spacing: 0.12em;
+          white-space: nowrap;
+          color: var(--time-color);
+          font-variant-numeric: tabular-nums;
+          font-feature-settings: "tnum" 1;
+        }
+
+        .widget-date-header.is-today .widget-date-time {
+          color: inherit;
+        }
+
         .widget-item {
-          display: flex;
+          display: grid;
+          grid-template-columns: 6px minmax(0, 1fr) 1.8rem;
           align-items: center;
           gap: 8px;
-          padding: 7px 12px;
+          padding: 7px 5px 7px 12px;
           margin: 0 8px;
           border-radius: 12px;
           transition:
@@ -399,18 +437,15 @@ const WidgetComponent: React.FC = () => {
           transition: color 0.4s ease;
         }
 
-        .widget-time {
-          font-size: 0.55rem;
-          color: var(--time-color);
-          flex-shrink: 0;
-          transition: color 0.4s ease;
-        }
-
         .widget-badge {
           font-size: 0.62rem;
           letter-spacing: 0.06em;
           color: var(--today-color);
-          flex-shrink: 0;
+          justify-self: start;
+          text-align: left;
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+          font-feature-settings: "tnum" 1;
           font-weight: bold;
         }
 
@@ -486,10 +521,12 @@ const WidgetComponent: React.FC = () => {
               grouped.map((group) => {
                 const diff = getDayDiff(group.date);
                 const isToday = diff === 0;
+                const groupTime = group.items[0]?.time;
                 return (
                   <div key={group.date} className="widget-date-group">
-                    <div className={`widget-date-label${isToday ? " is-today" : ""}`}>
-                      {getDateLabel(group.date)}
+                    <div className={`widget-date-header${isToday ? " is-today" : ""}`}>
+                      <span className="widget-date-label">{getDateLabel(group.date)}</span>
+                      {groupTime && <span className="widget-date-time">{groupTime}</span>}
                     </div>
                     {group.items.map((a) => {
                       const badge = getDdayBadge(getDayDiff(a.date));
@@ -498,7 +535,6 @@ const WidgetComponent: React.FC = () => {
                         <div key={a.id} className="widget-item">
                           <div className="widget-dot" style={{ background: a.color }} />
                           <span className="widget-name">{a.name}</span>
-                          <span className="widget-time">{a.time}</span>
                           {badge && (
                             <span className={`widget-badge${isUrgent ? " urgent" : ""}`}>
                               {badge}

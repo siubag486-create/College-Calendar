@@ -27,7 +27,7 @@ const MONTH_NAMES = [
   "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
 ];
 
-const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const DAY_LABELS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 const WIDGET_DAYS_KEY = "college-widget-days";
 type WidgetDays = 7 | 14 | 30;
@@ -110,10 +110,10 @@ const CalendarComponent: React.FC = () => {
     }
   };
 
-  // Build 42-cell grid. Week starts Monday.
+  // Build 42-cell grid. Week starts Sunday.
   const buildGrid = useCallback(() => {
     const firstDay = new Date(currentYear, currentMonth, 1);
-    const startDow = (firstDay.getDay() + 6) % 7;
+    const startDow = firstDay.getDay();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
     const cells: { dateStr: string; day: number; isCurrentMonth: boolean }[] = [];
@@ -227,6 +227,7 @@ const CalendarComponent: React.FC = () => {
           margin: 0;
           padding: 0;
           background: #000;
+          font-family: "Nanum Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
         }
 
         .cal-root {
@@ -528,7 +529,7 @@ const CalendarComponent: React.FC = () => {
         }
 
         .cal-assignment-name {
-          font-family: monospace;
+          font-family: "Nanum Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
           font-size: 0.55rem;
           letter-spacing: 0.04em;
           color: rgba(224, 224, 224, 0.7);
@@ -639,7 +640,7 @@ const CalendarComponent: React.FC = () => {
           border: none;
           border-bottom: 1px solid rgba(224, 224, 224, 0.15);
           color: #e0e0e0;
-          font-family: monospace;
+          font-family: "Nanum Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
           font-size: 0.85rem;
           padding: 0.4rem 0;
           outline: none;
@@ -761,7 +762,7 @@ const CalendarComponent: React.FC = () => {
         }
 
         .overlay-existing-name {
-          font-family: monospace;
+          font-family: "Nanum Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
           font-size: 0.7rem;
           color: rgba(224, 224, 224, 0.65);
           flex: 1;
@@ -1100,7 +1101,7 @@ const CalendarComponent: React.FC = () => {
 
                 const isUrgent = minDiff !== null && minDiff >= 0 && minDiff <= 3;
                 const dDayLabel =
-                  minDiff !== null && minDiff >= 0 && minDiff <= 7
+                  minDiff !== null && minDiff >= 0 && minDiff <= 30
                     ? `D-${minDiff}`
                     : null;
 
