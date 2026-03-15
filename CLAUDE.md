@@ -44,14 +44,14 @@ Static export mode (`output: "export"`) — no server required.
 ### Components
 
 - `components/hero-section.tsx` — Landing page hero (HALIDE/SILVER SULPHIDE dark design, Syncopate + monospace typography, grain texture, `#0a0a0a`/`#e0e0e0`/`#ff3c00` palette)
-- `components/calendar.tsx` — Full calendar with assignment management (client component, localStorage, edit mode)
-- `components/widget.tsx` — Compact 7-day widget (glassmorphism design, date-grouped assignments, D-day badges)
+- `components/calendar.tsx` — Full calendar with assignment management (client component, localStorage, always-editable — no edit mode toggle). `[ XD ]` button in header opens dropdown to select widget day range (7/14/30D), saved to `college-widget-days` localStorage key
+- `components/widget.tsx` — Compact widget (black/glass themes, date-grouped assignments, D-day badges). Day range driven by `college-widget-days` key (default 7). Theme stored in `college-widget-theme`
 - `components/ui/button.tsx` — shadcn button
 - `lib/assignments.ts` — Shared Assignment interface, localStorage helpers, date utilities
 
 ### Electron (Desktop App)
 
-- `electron/main.ts` — Widget window (240x300, bottom-right, `focusable:false`, `skipTaskbar:true`) + Editor window (1000x800, center popup). Tray with left-click toggle editor, right-click menu.
+- `electron/main.ts` — Widget window (240x300, bottom-right, `focusable:true`, `skipTaskbar:true`) + Editor window (1000x800, center popup). Tray with left-click toggle editor, right-click menu.
 - `electron/preload.ts` — IPC bridge (`openEditor`, `closeEditor`, `notifyAssignmentsChanged`, `onAssignmentsChanged`)
 - `electron/win32.ts` — Win32 FFI via koffi (user32.dll + dwmapi.dll): `pinToBottom()` HWND_BOTTOM, `pinAboveDesktop()` Progman 위 고정, `uncloak()` DWM 클로킹 해제
 - `electron-builder.yml` — NSIS installer config
@@ -59,7 +59,7 @@ Static export mode (`output: "export"`) — no server required.
 - `scripts/electron-dev.cjs` — async build runner (next build → tsc → electron)
 - Build output: `dist/College Calendar Setup 0.1.0.exe` → copy to `public/downloads/college-calendar-setup.exe` for web download
 - App flow: install .exe → widget visible bottom-right on desktop (hidden behind apps) → click/tray to open editor → edit assignments → widget remains
-- Widget z-order: 시작 시 `pinToBottom` (HWND_BOTTOM) + `minimize` event block. Alt+W 복원 시 `alwaysOnTop(true)` → 200ms 후 `alwaysOnTop(false)` (일반 z-order, focusable:false로 앱 클릭 시 자연히 뒤로)
+- Widget z-order: 시작 시 `pinToBottom` (HWND_BOTTOM) + `minimize` event block. Alt+W 복원 시 `alwaysOnTop(true, "screen-saver")` → 200ms 후 `alwaysOnTop(true, "normal")` + foreground watch 시작 → 다른 앱 포커스 시 `alwaysOnTop(false)` + `pinAboveDesktop()` (바탕화면 클릭해도 위젯 유지)
 - localStorage shared between widget and editor via same `app://` origin; IPC `assignments-changed` syncs changes
 
 ### Styling
@@ -80,3 +80,5 @@ Static export mode (`output: "export"`) — no server required.
 - Next.js 16 Turbopack has a PostCSS timeout bug — all build commands use `--webpack` flag to bypass
 - `tw-animate-css` import was removed from globals.css due to build issues
 - `next.config.ts` has custom webpack `watchOptions` to prevent Watchpack from scanning Windows system files (C:\ root)
+
+

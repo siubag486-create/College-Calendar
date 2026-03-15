@@ -29,25 +29,51 @@ const MONTH_NAMES = [
 
 const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
+const WIDGET_DAYS_KEY = "college-widget-days";
+type WidgetDays = 7 | 14 | 30;
+const DAY_OPTIONS: WidgetDays[] = [7, 14, 30];
+
+function loadWidgetDays(): WidgetDays {
+  if (typeof window === "undefined") return 7;
+  try {
+    const val = parseInt(localStorage.getItem(WIDGET_DAYS_KEY) || "7", 10);
+    return ([7, 14, 30] as number[]).includes(val) ? (val as WidgetDays) : 7;
+  } catch {
+    return 7;
+  }
+}
+
+function saveWidgetDays(days: WidgetDays): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(WIDGET_DAYS_KEY, String(days));
+  } catch {}
+}
+
 const CalendarComponent: React.FC = () => {
   const today = new Date();
 
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [editMode, setEditMode] = useState(false);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
-  const isElectron = typeof window !== "undefined" && !!window.electronAPI;
+  const [isOverlayClosing, setIsOverlayClosing] = useState(false);
+  const [isElectron, setIsElectron] = useState(false);
+  const [widgetDays, setWidgetDays] = useState<WidgetDays>(7);
+  const [dayPickerOpen, setDayPickerOpen] = useState(false);
 
   // Form state
   const [formName, setFormName] = useState("");
   const [formSubject, setFormSubject] = useState("");
   const [formTime, setFormTime] = useState("23:59");
   const [formColor, setFormColor] = useState("#ff3c00");
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
 
   useEffect(() => {
+    setIsElectron(!!window.electronAPI);
     setAssignments(loadAssignments());
+    setWidgetDays(loadWidgetDays());
   }, []);
 
   // Listen for assignment changes from widget
@@ -57,6 +83,14 @@ const CalendarComponent: React.FC = () => {
       setAssignments(loadAssignments());
     });
   }, [isElectron]);
+
+  // Close day picker on outside click
+  useEffect(() => {
+    if (!dayPickerOpen) return;
+    const close = () => setDayPickerOpen(false);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [dayPickerOpen]);
 
   const prevMonth = () => {
     if (currentMonth === 0) {
@@ -120,19 +154,38 @@ const CalendarComponent: React.FC = () => {
   const cells = buildGrid();
 
   const openOverlay = (dateStr: string) => {
-    if (!editMode) return;
     setSelectedDate(dateStr);
     setFormName("");
     setFormSubject("");
     setFormTime("23:59");
     setFormColor("#ff3c00");
+    setTimePickerOpen(false);
     setOverlayOpen(true);
   };
 
   const closeOverlay = () => {
-    setOverlayOpen(false);
-    setSelectedDate(null);
+    setTimePickerOpen(false);
+    setIsOverlayClosing(true);
+    setTimeout(() => {
+      setIsOverlayClosing(false);
+      setOverlayOpen(false);
+      setSelectedDate(null);
+    }, 260);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (overlayOpen) {
+          closeOverlay();
+        } else if (isElectron) {
+          window.electronAPI?.closeEditor();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [overlayOpen, isElectron]);
 
   const handleSave = () => {
     if (!selectedDate || !formName.trim()) return;
@@ -238,19 +291,25 @@ const CalendarComponent: React.FC = () => {
         .cal-close-btn {
           background: none;
           border: 1px solid rgba(224, 224, 224, 0.15);
-          border-radius: 14px;
+          border-radius: 4px;
           color: rgba(224, 224, 224, 0.4);
           font-family: monospace;
-          font-size: 0.75rem;
+          font-size: 0.7rem;
           cursor: pointer;
-          padding: 0.25rem 0.6rem;
+          width: 24px;
+          height: 24px;
+          padding: 0;
           line-height: 1;
-          transition: color 0.2s, border-color 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: color 0.2s, border-color 0.2s, background 0.2s;
         }
 
         .cal-close-btn:hover {
           color: #ff3c00;
-          border-color: #ff3c00;
+          border-color: rgba(255, 60, 0, 0.4);
+          background: rgba(255, 60, 0, 0.06);
         }
 
         .cal-header-left {
@@ -293,7 +352,13 @@ const CalendarComponent: React.FC = () => {
           color: #ff3c00;
         }
 
-        .cal-edit-btn {
+        /* Day range picker button */
+        .cal-days-btn-wrap {
+          position: relative;
+          -webkit-app-region: no-drag;
+        }
+
+        .cal-days-btn {
           background: #e0e0e0;
           color: #0a0a0a;
           border: none;
@@ -307,15 +372,59 @@ const CalendarComponent: React.FC = () => {
           transition: background 0.2s, transform 0.2s;
         }
 
-        .cal-edit-btn:hover {
+        .cal-days-btn:hover,
+        .cal-days-btn.open {
           background: #ff3c00;
           color: #0a0a0a;
           transform: translateY(-2px);
         }
 
-        .cal-edit-btn.active {
-          background: #ff3c00;
-          color: #0a0a0a;
+        .cal-days-dropdown {
+          position: absolute;
+          top: calc(100% + 10px);
+          right: 0;
+          background: #111;
+          border: 1px solid rgba(224, 224, 224, 0.12);
+          border-radius: 12px;
+          padding: 0.4rem;
+          z-index: 60;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+          animation: daysFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+          min-width: 90px;
+        }
+
+        @keyframes daysFadeIn {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .cal-days-option {
+          background: transparent;
+          border: none;
+          color: rgba(224, 224, 224, 0.45);
+          font-family: 'Syncopate', sans-serif;
+          font-weight: 700;
+          font-size: 0.58rem;
+          letter-spacing: 0.1em;
+          padding: 0.5rem 0.75rem;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: background 0.12s, color 0.12s;
+          text-align: left;
+          width: 100%;
+        }
+
+        .cal-days-option:hover {
+          background: rgba(224, 224, 224, 0.06);
+          color: #e0e0e0;
+        }
+
+        .cal-days-option.selected {
+          background: rgba(255, 60, 0, 0.12);
+          color: #ff3c00;
         }
 
         /* Day labels row */
@@ -354,13 +463,10 @@ const CalendarComponent: React.FC = () => {
           box-sizing: border-box;
           transition: background 0.15s;
           overflow: hidden;
-        }
-
-        .cal-cell.edit-mode {
           cursor: pointer;
         }
 
-        .cal-cell.edit-mode:hover {
+        .cal-cell:hover {
           background: rgba(224, 224, 224, 0.04);
         }
 
@@ -435,18 +541,26 @@ const CalendarComponent: React.FC = () => {
 
         .cal-delete-btn {
           background: none;
-          border: none;
+          border: 1px solid rgba(224, 224, 224, 0.12);
+          border-radius: 3px;
           color: rgba(224, 224, 224, 0.3);
-          font-size: 0.5rem;
+          font-size: 0.55rem;
           cursor: pointer;
           padding: 0;
+          width: 14px;
+          height: 14px;
           line-height: 1;
           flex-shrink: 0;
           font-family: monospace;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .cal-delete-btn:hover {
           color: #ff3c00;
+          border-color: rgba(255, 60, 0, 0.4);
+          background: rgba(255, 60, 0, 0.06);
         }
 
         /* Overlay */
@@ -474,9 +588,18 @@ const CalendarComponent: React.FC = () => {
           overflow-y: auto;
         }
 
+        .cal-overlay-panel.closing {
+          animation: slideOutRight 0.26s cubic-bezier(0.4, 0, 1, 1) forwards;
+        }
+
         @keyframes slideInRight {
           from { transform: translateX(100%); opacity: 0; }
           to   { transform: translateX(0);    opacity: 1; }
+        }
+
+        @keyframes slideOutRight {
+          from { transform: translateX(0);    opacity: 1; }
+          to   { transform: translateX(100%); opacity: 0; }
         }
 
         .overlay-title {
@@ -653,28 +776,169 @@ const CalendarComponent: React.FC = () => {
           font-size: 0.6rem;
           color: rgba(224, 224, 224, 0.3);
           flex-shrink: 0;
+          line-height: 1;
         }
 
         .overlay-existing-del {
           background: none;
-          border: none;
-          color: rgba(224, 224, 224, 0.2);
+          border: 1px solid rgba(224, 224, 224, 0.12);
+          border-radius: 4px;
+          color: rgba(224, 224, 224, 0.25);
           font-family: monospace;
-          font-size: 0.65rem;
+          font-size: 0.55rem;
+          line-height: 1;
           cursor: pointer;
-          padding: 0 0.2rem;
+          padding: 0;
+          width: 18px;
+          height: 18px;
           flex-shrink: 0;
-          transition: color 0.15s;
+          transition: color 0.15s, border-color 0.15s, background 0.15s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .overlay-existing-del:hover {
           color: #ff3c00;
+          border-color: rgba(255, 60, 0, 0.4);
+          background: rgba(255, 60, 0, 0.06);
         }
 
         .overlay-divider {
           border: none;
           border-top: 1px solid rgba(224, 224, 224, 0.08);
           margin: 1.5rem 0;
+        }
+
+        .time-picker-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          border-bottom: 1px solid rgba(224, 224, 224, 0.15);
+          padding-bottom: 0.4rem;
+          transition: border-color 0.2s;
+          position: relative;
+        }
+
+        .time-display {
+          font-family: monospace;
+          font-size: 0.85rem;
+          color: #e0e0e0;
+          padding: 0.4rem 0;
+          flex: 1;
+          letter-spacing: 0.04em;
+        }
+
+        .time-display .time-period {
+          font-size: 0.65rem;
+          color: rgba(224, 224, 224, 0.45);
+          margin-left: 0.35rem;
+          letter-spacing: 0.08em;
+        }
+
+        .time-clock-btn {
+          background: none;
+          border: 1px solid rgba(224, 224, 224, 0.12);
+          border-radius: 6px;
+          color: rgba(224, 224, 224, 0.4);
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: color 0.2s, border-color 0.2s, background 0.2s;
+          flex-shrink: 0;
+          padding: 0;
+        }
+
+        .time-clock-btn:hover,
+        .time-clock-btn.active {
+          color: #ff3c00;
+          border-color: rgba(255, 60, 0, 0.4);
+          background: rgba(255, 60, 0, 0.06);
+        }
+
+        .time-dropdown {
+          position: absolute;
+          top: calc(100% + 8px);
+          right: 0;
+          background: #151515;
+          border: 1px solid rgba(224, 224, 224, 0.12);
+          border-radius: 12px;
+          padding: 0.75rem;
+          z-index: 60;
+          display: flex;
+          gap: 0.5rem;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+          animation: timeFadeIn 0.18s ease;
+        }
+
+        @keyframes timeFadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .time-col {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          min-width: 0;
+        }
+
+        .time-col-label {
+          font-family: monospace;
+          font-size: 0.45rem;
+          letter-spacing: 0.16em;
+          color: rgba(224, 224, 224, 0.3);
+          text-align: center;
+          padding-bottom: 0.3rem;
+          text-transform: uppercase;
+        }
+
+        .time-col-scroll {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          max-height: 160px;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(224, 224, 224, 0.08) transparent;
+        }
+
+        .time-col-scroll::-webkit-scrollbar {
+          width: 3px;
+        }
+        .time-col-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .time-col-scroll::-webkit-scrollbar-thumb {
+          background: rgba(224, 224, 224, 0.08);
+          border-radius: 2px;
+        }
+
+        .time-option {
+          background: transparent;
+          border: none;
+          color: rgba(224, 224, 224, 0.5);
+          font-family: monospace;
+          font-size: 0.75rem;
+          padding: 0.3rem 0.6rem;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background 0.12s, color 0.12s;
+          text-align: center;
+          white-space: nowrap;
+        }
+
+        .time-option:hover {
+          background: rgba(224, 224, 224, 0.06);
+          color: #e0e0e0;
+        }
+
+        .time-option.selected {
+          background: rgba(255, 60, 0, 0.12);
+          color: #ff3c00;
         }
 
         .overlay-add-title {
@@ -769,12 +1033,37 @@ const CalendarComponent: React.FC = () => {
               </div>
 
               <div className="cal-header-right">
-                <button
-                  className={`cal-edit-btn${editMode ? " active" : ""}`}
-                  onClick={() => setEditMode(!editMode)}
-                >
-                  {editMode ? "[ LOCK ]" : "[ EDIT ]"}
-                </button>
+                {/* Day range picker */}
+                <div className="cal-days-btn-wrap">
+                  <button
+                    className={`cal-days-btn${dayPickerOpen ? " open" : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDayPickerOpen(!dayPickerOpen);
+                    }}
+                  >
+                    [ {widgetDays}D ]
+                  </button>
+                  {dayPickerOpen && (
+                    <div className="cal-days-dropdown" onClick={(e) => e.stopPropagation()}>
+                      {DAY_OPTIONS.map((d) => (
+                        <button
+                          key={d}
+                          className={`cal-days-option${widgetDays === d ? " selected" : ""}`}
+                          onClick={() => {
+                            setWidgetDays(d);
+                            saveWidgetDays(d);
+                            setDayPickerOpen(false);
+                            window.electronAPI?.notifyAssignmentsChanged();
+                          }}
+                        >
+                          {d}D
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {isElectron && (
                   <button
                     className="cal-close-btn"
@@ -816,7 +1105,6 @@ const CalendarComponent: React.FC = () => {
                     : null;
 
                 let cellClass = "cal-cell";
-                if (editMode) cellClass += " edit-mode";
                 if (isToday) cellClass += " is-today";
                 if (isOtherMonth) cellClass += " other-month";
 
@@ -825,15 +1113,11 @@ const CalendarComponent: React.FC = () => {
                     key={cell.dateStr}
                     className={cellClass}
                     onClick={() => openOverlay(cell.dateStr)}
-                    role={editMode ? "button" : undefined}
-                    tabIndex={editMode ? 0 : undefined}
-                    onKeyDown={
-                      editMode
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") openOverlay(cell.dateStr);
-                          }
-                        : undefined
-                    }
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") openOverlay(cell.dateStr);
+                    }}
                   >
                     {dDayLabel && (
                       <span className="cal-dday-label">{dDayLabel}</span>
@@ -852,15 +1136,13 @@ const CalendarComponent: React.FC = () => {
                               style={{ background: a.color }}
                             />
                             <span className="cal-assignment-name">{a.name}</span>
-                            {editMode && (
-                              <button
-                                className="cal-delete-btn"
-                                onClick={(e) => handleDeleteAssignment(a.id, e)}
-                                aria-label={`Delete ${a.name}`}
-                              >
-                                x
-                              </button>
-                            )}
+                            <button
+                              className="cal-delete-btn"
+                              onClick={(e) => handleDeleteAssignment(a.id, e)}
+                              aria-label={`Delete ${a.name}`}
+                            >
+                              x
+                            </button>
                           </div>
                         ))}
                         {cellAssignments.length > 3 && (
@@ -889,7 +1171,7 @@ const CalendarComponent: React.FC = () => {
       {overlayOpen && selectedDate && (
         <>
           <div className="cal-overlay-backdrop" onClick={closeOverlay} />
-          <div className="cal-overlay-panel" role="dialog" aria-modal="true">
+          <div className={`cal-overlay-panel${isOverlayClosing ? " closing" : ""}`} role="dialog" aria-modal="true">
             <div className="overlay-title">ASSIGNMENT</div>
             <div className="overlay-date-label">{selectedDate}</div>
 
@@ -958,17 +1240,97 @@ const CalendarComponent: React.FC = () => {
             </div>
 
             <div className="overlay-field">
-              <label className="overlay-label" htmlFor="cal-form-time">
-                Deadline Time
-              </label>
-              <input
-                id="cal-form-time"
-                className="overlay-input"
-                type="time"
-                value={formTime}
-                onChange={(e) => setFormTime(e.target.value)}
-                style={{ colorScheme: "dark" }}
-              />
+              <div className="overlay-label">Deadline Time</div>
+              {(() => {
+                const h24 = parseInt(formTime.split(":")[0], 10);
+                const min = formTime.split(":")[1];
+                const isPM = h24 >= 12;
+                const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+                const displayTime = `${h12}:${min}`;
+                const period = isPM ? "PM" : "AM";
+
+                const setTimeParts = (newPeriod: string, newH12: number, newMin: string) => {
+                  let h = newH12;
+                  if (newPeriod === "AM") {
+                    if (h === 12) h = 0;
+                  } else {
+                    if (h !== 12) h += 12;
+                  }
+                  setFormTime(`${String(h).padStart(2, "0")}:${newMin}`);
+                };
+
+                return (
+                  <div className="time-picker-row">
+                    <div className="time-display">
+                      {displayTime}
+                      <span className="time-period">{period}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`time-clock-btn${timePickerOpen ? " active" : ""}`}
+                      onClick={() => setTimePickerOpen(!timePickerOpen)}
+                      aria-label="Open time picker"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                    </button>
+
+                    {timePickerOpen && (
+                      <div className="time-dropdown">
+                        <div className="time-col">
+                          <div className="time-col-label">Period</div>
+                          <div className="time-col-scroll">
+                            {["AM", "PM"].map((p) => (
+                              <button
+                                key={p}
+                                type="button"
+                                className={`time-option${period === p ? " selected" : ""}`}
+                                onClick={() => { setTimeParts(p, h12, min); }}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="time-col">
+                          <div className="time-col-label">Hour</div>
+                          <div className="time-col-scroll">
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                              <button
+                                key={h}
+                                type="button"
+                                className={`time-option${h12 === h ? " selected" : ""}`}
+                                onClick={() => { setTimeParts(period, h, min); }}
+                              >
+                                {h}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="time-col">
+                          <div className="time-col-label">Min</div>
+                          <div className="time-col-scroll">
+                            {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0")).map((m) => (
+                              <button
+                                key={m}
+                                type="button"
+                                className={`time-option${min === m ? " selected" : ""}`}
+                                onClick={() => { setTimeParts(period, h12, m); }}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="overlay-field">

@@ -16,6 +16,7 @@ import {
   getForegroundHwnd,
   hwndFromBuffer,
   isDesktopShellWindow,
+  pinAboveDesktop,
   pinToBottom,
   uncloak,
 } from "./win32";
@@ -32,7 +33,9 @@ let editorWin: BrowserWindow | null = null;
 let widgetLoaded = false;
 let pendingWidgetRestore = false;
 let fgWatchTimer: ReturnType<typeof setInterval> | null = null;
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const isDevElectronRun = process.env.COLLEGE_WIDGET_DEV === "1";
+const devServerUrl = process.env.COLLEGE_DEV_SERVER_URL || "";
+const hasSingleInstanceLock = isDevElectronRun ? true : app.requestSingleInstanceLock();
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -87,6 +90,7 @@ function startForegroundWatch(): void {
     }
 
     widgetWin.setAlwaysOnTop(false);
+    pinAboveDesktop(widgetWin.getNativeWindowHandle());
     stopForegroundWatch();
   }, 250);
 }
@@ -157,7 +161,11 @@ function createWidgetWindow(): void {
     },
   });
 
-  widgetWin.loadURL("app://host/widget/index.html");
+  if (devServerUrl) {
+    widgetWin.loadURL(`${devServerUrl}/widget`);
+  } else {
+    widgetWin.loadURL("app://host/widget/index.html");
+  }
 
   widgetWin.webContents.on("did-fail-load", (_e, code, desc) => {
     console.error("[widget] load failed:", code, desc);
@@ -238,7 +246,11 @@ function createEditorWindow(): void {
     },
   });
 
-  editorWin.loadURL("app://host/calendar/index.html");
+  if (devServerUrl) {
+    editorWin.loadURL(`${devServerUrl}/calendar`);
+  } else {
+    editorWin.loadURL("app://host/calendar/index.html");
+  }
   editorWin.show();
   editorWin.moveTop();
 
@@ -348,9 +360,11 @@ if (!hasSingleInstanceLock) {
   app.quit();
 }
 
-app.on("second-instance", () => {
-  focusExistingApp();
-});
+if (!isDevElectronRun) {
+  app.on("second-instance", () => {
+    focusExistingApp();
+  });
+}
 
 app.whenReady().then(() => {
   console.log("[main] app ready");
