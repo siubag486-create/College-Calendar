@@ -13,9 +13,6 @@ import {
 import path from "path";
 import { pathToFileURL } from "url";
 import {
-  getForegroundHwnd,
-  hwndFromBuffer,
-  isDesktopShellWindow,
   pinAboveDesktop,
   restoreWindow,
   settleAboveDesktop,
@@ -32,9 +29,12 @@ let tray: Tray | null = null;
 let widgetWin: BrowserWindow | null = null;
 let editorWin: BrowserWindow | null = null;
 let widgetLoaded = false;
+let editorLoaded = false;
+let pendingEditorShow = false;
 let pendingWidgetRestore = false;
-let visibilityWatchTimer: ReturnType<typeof setInterval> | null = null;
+let desktopSettleTimer: ReturnType<typeof setTimeout> | null = null;
 let widgetVisible = false;
+let isQuitting = false;
 const isDevElectronRun = process.env.COLLEGE_WIDGET_DEV === "1";
 const devServerUrl = process.env.COLLEGE_DEV_SERVER_URL || "";
 const hasSingleInstanceLock = isDevElectronRun ? true : app.requestSingleInstanceLock();
@@ -57,76 +57,118 @@ function getOutPath(...segments: string[]): string {
 
 // Widget window
 
-function stopVisibilityWatch(): void {
-  if (visibilityWatchTimer) {
-    clearInterval(visibilityWatchTimer);
-    visibilityWatchTimer = null;
+function stopDesktopSettle(): void {
+  if (desktopSettleTimer) {
+    clearTimeout(desktopSettleTimer);
+    desktopSettleTimer = null;
   }
 }
 
-function isDesktopContext(): boolean {
-  if (!widgetWin || widgetWin.isDestroyed()) return false;
-
-  const foregroundHwnd = getForegroundHwnd();
-  const widgetHwnd = hwndFromBuffer(widgetWin.getNativeWindowHandle());
-
-  return (
-    foregroundHwnd === 0n ||
-    foregroundHwnd === widgetHwnd ||
-    isDesktopShellWindow(foregroundHwnd)
-  );
+function stopVisibilityWatch(): void {
+  stopDesktopSettle();
 }
 
-function showWidgetPinnedToDesktop(): void {
+function settleWidgetOnDesktop(): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
-  const handle = widgetWin.getNativeWindowHandle();
-  restoreWindow(handle);
+  const handle = widgetWin!.getNativeWindowHandle();
+  uncloak(handle);
   settleAboveDesktop(handle);
   pinAboveDesktop(handle);
-  widgetWin.showInactive();
-  uncloak(handle);
-  widgetVisible = true;
 }
 
-function hideWidgetForApps(): void {
+function scheduleDesktopSettle(): void {
+  stopDesktopSettle();
+  desktopSettleTimer = setTimeout(() => {
+    settleWidgetOnDesktop();
+    desktopSettleTimer = null;
+  }, 120);
+}
+
+function showWidgetPinnedToDesktop(forceReveal = false): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
-  if (widgetWin.isVisible()) {
-    widgetWin.hide();
+
+  // 1. Uncloak first — Win+D cloaks via DWM, must undo before anything else
+  if (widgetWin!.isMinimized()) widgetWin!.restore();
+
+  if (forceReveal || !widgetWin.isVisible()) {
+    restoreWindow(widgetWin.getNativeWindowHandle());
+    widgetWin.showInactive();
   }
-  widgetVisible = false;
+
+  settleWidgetOnDesktop();
+  scheduleDesktopSettle();
+  widgetVisible = true;
 }
 
 function syncWidgetVisibility(forceRestore = false): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
-
-  if (forceRestore || isDesktopContext()) {
-    if (forceRestore || !widgetVisible || !widgetWin.isVisible()) {
-      showWidgetPinnedToDesktop();
-    }
+  if (forceRestore || !widgetVisible || !widgetWin.isVisible()) {
+    showWidgetPinnedToDesktop(forceRestore);
     return;
   }
-
-  if (widgetVisible || widgetWin.isVisible()) {
-    hideWidgetForApps();
-  }
+  settleWidgetOnDesktop();
+  scheduleDesktopSettle();
 }
 
 function startVisibilityWatch(): void {
-  stopVisibilityWatch();
-  visibilityWatchTimer = setInterval(() => {
-    if (!widgetWin || widgetWin.isDestroyed()) {
-      stopVisibilityWatch();
-      return;
-    }
-    syncWidgetVisibility();
-  }, 150);
+  settleWidgetOnDesktop();
+  scheduleDesktopSettle();
 }
 
 function restoreWidgetWindow(): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
-  if (widgetWin.isMinimized()) widgetWin.restore();
-  syncWidgetVisibility(true);
+  showWidgetPinnedToDesktop(true);
+  return;
+  const handle = widgetWin!.getNativeWindowHandle();
+ 
+
+  // 1. Uncloak FIRST (Win+D cloaks windows — must undo before show)
+  uncloak(handle);
+
+  // 2. Force restore and show
+  if (widgetWin!.isMinimized()) widgetWin!.restore();
+  restoreWindow(handle);
+  widgetWin!.showInactive();
+
+  widgetVisible = true;
+
+  // 3. Restart visibility watch — show on desktop, hide when apps are foreground
   startVisibilityWatch();
+}
+
+function animateOpacity(
+  win: BrowserWindow,
+  from: number,
+  to: number,
+  duration: number,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const steps = Math.max(Math.round(duration / 16), 1);
+    let step = 0;
+    win.setOpacity(from);
+    const timer = setInterval(() => {
+      step++;
+      const t = step / steps;
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      win.setOpacity(from + (to - from) * eased);
+      if (step >= steps) {
+        clearInterval(timer);
+        win.setOpacity(to);
+        resolve();
+      }
+    }, 16);
+  });
+}
+
+function showEditorWindow(): void {
+  if (!editorWin || editorWin.isDestroyed()) return;
+  if (editorWin.isMinimized()) editorWin.restore();
+  editorWin.setOpacity(0);
+  if (!editorWin.isVisible()) editorWin.show();
+  editorWin.moveTop();
+  editorWin.focus();
+  pendingEditorShow = false;
+  animateOpacity(editorWin, 0, 1, 220);
 }
 
 let lastRestoreTime = 0;
@@ -226,16 +268,12 @@ function createWidgetWindow(): void {
 
 // Editor window
 
-function createEditorWindow(): void {
-  if (widgetWin && !widgetWin.isDestroyed()) {
-    hideWidgetForApps();
-  }
-
+function createEditorWindow(showOnReady = true): void {
   if (editorWin && !editorWin.isDestroyed()) {
-    if (editorWin.isMinimized()) editorWin.restore();
-    if (!editorWin.isVisible()) editorWin.show();
-    editorWin.moveTop();
-    editorWin.focus();
+    pendingEditorShow = showOnReady;
+    if (showOnReady && editorLoaded) {
+      showEditorWindow();
+    }
     return;
   }
 
@@ -264,14 +302,14 @@ function createEditorWindow(): void {
       preload: path.join(__dirname, "preload.js"),
     },
   });
+  editorLoaded = false;
+  pendingEditorShow = showOnReady;
 
   if (devServerUrl) {
     editorWin.loadURL(`${devServerUrl}/calendar`);
   } else {
     editorWin.loadURL("app://host/calendar/index.html");
   }
-  editorWin.show();
-  editorWin.moveTop();
 
   editorWin.webContents.on("did-fail-load", (_e, code, desc) => {
     console.error("[editor] load failed:", code, desc);
@@ -279,32 +317,51 @@ function createEditorWindow(): void {
 
   editorWin.once("ready-to-show", () => {
     console.log("[editor] ready-to-show fired");
-    editorWin?.show();
-    editorWin?.moveTop();
-    editorWin?.focus();
+    if (pendingEditorShow) {
+      showEditorWindow();
+    }
   });
 
   editorWin.webContents.once("did-finish-load", () => {
-    if (editorWin && !editorWin.isDestroyed() && !editorWin.isVisible()) {
-      editorWin.show();
-      editorWin.moveTop();
-      editorWin.focus();
+    editorLoaded = true;
+    if (pendingEditorShow) {
+      showEditorWindow();
     }
+  });
+
+  editorWin.on("close", (e) => {
+    if (isQuitting) {
+      return;
+    }
+
+    e.preventDefault();
+    closeEditorWindow();
   });
 
   editorWin.on("closed", () => {
     editorWin = null;
+    editorLoaded = false;
+    pendingEditorShow = false;
   });
 }
 
+let isEditorClosing = false;
+
 function closeEditorWindow(): void {
-  if (editorWin && !editorWin.isDestroyed()) {
-    editorWin.close();
-  }
+  if (!editorWin || editorWin.isDestroyed() || isEditorClosing) return;
+  isEditorClosing = true;
+  pendingEditorShow = false;
+  animateOpacity(editorWin, 1, 0, 180).then(() => {
+    if (editorWin && !editorWin.isDestroyed()) {
+      editorWin.hide();
+      editorWin.setOpacity(1);
+    }
+    isEditorClosing = false;
+  });
 }
 
 function focusExistingApp(): void {
-  if (editorWin && !editorWin.isDestroyed()) {
+  if (editorWin && !editorWin.isDestroyed() && editorWin.isVisible()) {
     if (editorWin.isMinimized()) editorWin.restore();
     if (!editorWin.isVisible()) editorWin.show();
     editorWin.moveTop();
@@ -346,7 +403,7 @@ function createTray(): void {
   tray.setContextMenu(contextMenu);
 
   tray.on("click", () => {
-    if (editorWin && !editorWin.isDestroyed()) {
+    if (editorWin && !editorWin.isDestroyed() && editorWin.isVisible()) {
       closeEditorWindow();
     } else {
       createEditorWindow();
@@ -401,12 +458,21 @@ app.whenReady().then(() => {
 
   createWidgetWindow();
   createTray();
+  createEditorWindow(false);
 
-  globalShortcut.register("Alt+W", () => {
+  const shortcutRegistered = globalShortcut.register("Alt+W", () => {
     restoreWidget();
   });
 
+  if (!shortcutRegistered) {
+    console.error("[shortcut] failed to register Alt+W");
+  }
+
   console.log("[main] widget + tray created, Alt+W registered");
+});
+
+app.on("before-quit", () => {
+  isQuitting = true;
 });
 
 app.on("will-quit", () => {

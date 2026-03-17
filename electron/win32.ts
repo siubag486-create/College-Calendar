@@ -12,7 +12,7 @@ const GetAncestor = user32.func("GetAncestor", "void *", ["void *", "uint32"]);
 const GetClassNameW = user32.func("GetClassNameW", "int", [
   "void *", "char16_t *", "int",
 ]);
-const FindWindowA = user32.func("FindWindowA", "void *", ["str", "void *"]);
+const FindWindowA = user32.func("FindWindowA", "intptr", ["str", "intptr"]);
 const DwmSetWindowAttribute = dwmapi.func("DwmSetWindowAttribute", "int", [
   "void *", "uint32", "void *", "uint32",
 ]);
@@ -131,13 +131,10 @@ export function restoreWindow(electronHWND: Buffer): void {
 export function pinAboveDesktop(electronHWND: Buffer): void {
   try {
     const hwnd = bufferToHwnd(electronHWND);
-    let insertAfter = HWND_BOTTOM;
+    let insertAfter: bigint = HWND_BOTTOM;
     try {
-      const progman = FindWindowA("Progman", null) as Buffer | null;
-      if (progman) {
-        const progmanHwnd = bufferToHwnd(progman);
-        if (progmanHwnd !== 0n) insertAfter = progmanHwnd;
-      }
+      const progmanHwnd = FindWindowA("Progman", 0) as unknown as bigint;
+      if (progmanHwnd && progmanHwnd !== 0n) insertAfter = progmanHwnd;
     } catch {
       // Progman 못 찾으면 HWND_BOTTOM fallback
     }
@@ -160,12 +157,9 @@ export function settleAboveDesktop(electronHWND: Buffer): void {
 
     // 2) Progman 바로 위에 배치
     try {
-      const progman = FindWindowA("Progman", null) as Buffer | null;
-      if (progman) {
-        const progmanHwnd = bufferToHwnd(progman);
-        if (progmanHwnd !== 0n) {
-          SetWindowPos(hwnd, progmanHwnd, 0, 0, 0, 0, flags);
-        }
+      const progmanHwnd = FindWindowA("Progman", 0) as unknown as bigint;
+      if (progmanHwnd && progmanHwnd !== 0n) {
+        SetWindowPos(hwnd, progmanHwnd, 0, 0, 0, 0, flags);
       }
     } catch {
       // fallback: NOTOPMOST 위치 유지

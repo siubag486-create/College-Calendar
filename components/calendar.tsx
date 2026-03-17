@@ -276,6 +276,18 @@ const CalendarComponent: React.FC = () => {
           border-radius: 40px;
           box-shadow: 0 24px 72px rgba(0, 0, 0, 0.38);
           overflow: hidden;
+          animation: editorEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes editorEnter {
+          from {
+            opacity: 0;
+            transform: scale(0.96) translateY(12px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
         }
 
         .cal-wrapper {

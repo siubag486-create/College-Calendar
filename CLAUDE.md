@@ -75,6 +75,11 @@ Static export mode (`output: "export"`) — no server required.
 - Path aliases: `@/components`, `@/lib`, `@/hooks`
 - Add components: `npx shadcn add <component-name>`
 
+### TODO
+
+- **Windows 자동 시작 등록**: `app.setLoginItemSettings({ openAtLogin: true })`를 `electron/main.ts`에 추가하여 부팅 시 위젯 자동 실행되도록 구현 필요
+- hero section 디자인 수정 랜딩페이지 작성 
+
 ### Known Issues
 
 - Next.js 16 Turbopack has a PostCSS timeout bug — all build commands use `--webpack` flag to bypass
