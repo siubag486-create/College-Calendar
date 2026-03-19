@@ -98,13 +98,16 @@ const WidgetComponent: React.FC = () => {
     window.electronAPI?.onAssignmentsChanged(refresh);
 
     const sendNotif = (title: string, body: string) => {
-      if (!("Notification" in window)) return;
-      if (Notification.permission === "granted") {
-        new Notification(title, { body });
-      } else if (Notification.permission !== "denied") {
-        Notification.requestPermission().then((perm) => {
-          if (perm === "granted") new Notification(title, { body });
-        });
+      if (window.electronAPI?.sendNotification) {
+        window.electronAPI.sendNotification(title, body);
+      } else if ("Notification" in window) {
+        if (Notification.permission === "granted") {
+          new Notification(title, { body });
+        } else if (Notification.permission !== "denied") {
+          Notification.requestPermission().then((perm) => {
+            if (perm === "granted") new Notification(title, { body });
+          });
+        }
       }
     };
 
@@ -114,8 +117,6 @@ const WidgetComponent: React.FC = () => {
 
       const today = new Date();
       const todayStr = formatYMD(today.getFullYear(), today.getMonth(), today.getDate());
-      const lastCheck = localStorage.getItem(NOTIF_LAST_CHECK_KEY);
-      if (lastCheck === todayStr) return;
 
       const all = loadAssignments();
       const upcoming = all.filter((a) => {
