@@ -43,9 +43,7 @@ next-env.d.ts
 # electron build output
 /dist/
 
-# downloadable binaries
-/public/downloads/*.exe
-/public/downloads/*.dmg
+# downloadable binaries (tracked in repo — do not ignore)
 *.dmg
 
 # electron compiled JS (generated from .ts)
