@@ -10,6 +10,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -27,8 +29,14 @@ jobs:
       - name: Build
         run: pnpm electron:build
 
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer
-          path: dist/*.exe
+      - name: Copy exe to public/downloads
+        run: |
+          copy "dist\College Calendar Setup 0.1.0.exe" "public\downloads\college-calendar-setup.exe"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/downloads/college-calendar-setup.exe
+          git diff --staged --quiet || git commit -m "Update Windows installer"
+          git push
