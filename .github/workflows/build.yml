@@ -27,7 +27,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: next build --webpack && tsc --project tsconfig.electron.json && electron-builder --publish never
+        run: pnpm next build --webpack && pnpm tsc --project tsconfig.electron.json && pnpm electron-builder --publish never
 
       - name: Copy exe to public/downloads
         run: |
