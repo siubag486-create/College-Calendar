@@ -69,6 +69,7 @@ Static export mode (`output: "export"`) — no server required.
 
 - Tailwind CSS v4 via `@tailwindcss/postcss` (no `tailwind.config.js` — configured in `globals.css`)
 - Theme uses OKLch CSS variables for light/dark mode
+- `--font-korean` CSS variable: `"Nanum Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif` — applied to `body` in globals.css
 - Component variants use `class-variance-authority` (CVA)
 - Merge classes with `cn()` from `lib/utils.ts` (clsx + tailwind-merge)
 
@@ -81,7 +82,6 @@ Static export mode (`output: "export"`) — no server required.
 ### TODO
 
 - **Windows 자동 시작 등록**: `app.setLoginItemSettings({ openAtLogin: true })`를 `electron/main.ts`에 추가하여 부팅 시 위젯 자동 실행되도록 구현 필요
-- hero section 디자인 수정 랜딩페이지 작성
 
 ---
 
@@ -99,5 +99,6 @@ Static export mode (`output: "export"`) — no server required.
 - Next.js 16 Turbopack has a PostCSS timeout bug — all build commands use `--webpack` flag to bypass
 - `tw-animate-css` import was removed from globals.css due to build issues
 - `next.config.ts` has custom webpack `watchOptions` to prevent Watchpack from scanning Windows system files (C:\ root)
+- macOS 코드 서명 미설정 — 설치 후 Gatekeeper 경고 시 `xattr -cr /Applications/College\ Calendar.app` 실행 필요
 
 
