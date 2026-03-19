@@ -9,6 +9,7 @@ import {
   protocol,
   net,
   globalShortcut,
+  Notification,
 } from "electron";
 import path from "path";
 import { pathToFileURL } from "url";
@@ -17,7 +18,7 @@ import {
   restoreWindow,
   settleAboveDesktop,
   uncloak,
-} from "./win32";
+} from "./platform";
 
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 app.setName("College Calendar");
@@ -70,10 +71,9 @@ function stopVisibilityWatch(): void {
 
 function settleWidgetOnDesktop(): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
-  const handle = widgetWin!.getNativeWindowHandle();
-  uncloak(handle);
-  settleAboveDesktop(handle);
-  pinAboveDesktop(handle);
+  uncloak(widgetWin);
+  settleAboveDesktop(widgetWin);
+  pinAboveDesktop(widgetWin);
 }
 
 function scheduleDesktopSettle(): void {
@@ -91,7 +91,7 @@ function showWidgetPinnedToDesktop(forceReveal = false): void {
   if (widgetWin!.isMinimized()) widgetWin!.restore();
 
   if (forceReveal || !widgetWin.isVisible()) {
-    restoreWindow(widgetWin.getNativeWindowHandle());
+    restoreWindow(widgetWin);
     widgetWin.showInactive();
   }
 
@@ -118,22 +118,6 @@ function startVisibilityWatch(): void {
 function restoreWidgetWindow(): void {
   if (!widgetWin || widgetWin.isDestroyed()) return;
   showWidgetPinnedToDesktop(true);
-  return;
-  const handle = widgetWin!.getNativeWindowHandle();
- 
-
-  // 1. Uncloak FIRST (Win+D cloaks windows — must undo before show)
-  uncloak(handle);
-
-  // 2. Force restore and show
-  if (widgetWin!.isMinimized()) widgetWin!.restore();
-  restoreWindow(handle);
-  widgetWin!.showInactive();
-
-  widgetVisible = true;
-
-  // 3. Restart visibility watch — show on desktop, hide when apps are foreground
-  startVisibilityWatch();
 }
 
 function animateOpacity(
@@ -211,7 +195,7 @@ function createWidgetWindow(): void {
     alwaysOnTop: false,
     focusable: true,
     show: false,
-    hasShadow: true,
+    hasShadow: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -419,6 +403,12 @@ ipcMain.on("open-editor", () => {
 
 ipcMain.on("close-editor", () => {
   closeEditorWindow();
+});
+
+ipcMain.on("send-notification", (_e, { title, body }: { title: string; body: string }) => {
+  if (Notification.isSupported()) {
+    new Notification({ title, body }).show();
+  }
 });
 
 ipcMain.on("assignments-changed", () => {

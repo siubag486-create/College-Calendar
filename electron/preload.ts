@@ -9,4 +9,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
       callback();
     });
   },
+  sendNotification: (title: string, body: string) =>
+    ipcRenderer.send("send-notification", { title, body }),
 });

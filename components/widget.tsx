@@ -6,6 +6,9 @@ import {
   type Assignment,
   loadAssignments,
   getDayDiff,
+  loadNotifSettings,
+  NOTIF_LAST_CHECK_KEY,
+  formatYMD,
 } from "@/lib/assignments";
 
 declare global {
@@ -15,6 +18,7 @@ declare global {
       closeEditor: () => void;
       notifyAssignmentsChanged: () => void;
       onAssignmentsChanged: (callback: () => void) => void;
+      sendNotification: (title: string, body: string) => void;
     };
   }
 }
@@ -92,7 +96,55 @@ const WidgetComponent: React.FC = () => {
   useEffect(() => {
     const frameId = window.requestAnimationFrame(syncInitialState);
     window.electronAPI?.onAssignmentsChanged(refresh);
-    return () => window.cancelAnimationFrame(frameId);
+
+    const sendNotif = (title: string, body: string) => {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        new Notification(title, { body });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then((perm) => {
+          if (perm === "granted") new Notification(title, { body });
+        });
+      }
+    };
+
+    const checkNotifications = () => {
+      const { enabled, days } = loadNotifSettings();
+      if (!enabled) return;
+
+      const today = new Date();
+      const todayStr = formatYMD(today.getFullYear(), today.getMonth(), today.getDate());
+      const lastCheck = localStorage.getItem(NOTIF_LAST_CHECK_KEY);
+      if (lastCheck === todayStr) return;
+
+      const all = loadAssignments();
+      const upcoming = all.filter((a) => {
+        const diff = getDayDiff(a.date);
+        return diff >= 0 && diff <= days;
+      });
+
+      if (upcoming.length === 0) return;
+
+      localStorage.setItem(NOTIF_LAST_CHECK_KEY, todayStr);
+
+      if (upcoming.length === 1) {
+        const a = upcoming[0];
+        const diff = getDayDiff(a.date);
+        const dayText = diff === 0 ? "오늘" : diff === 1 ? "내일" : `${diff}일 후`;
+        sendNotif("College Calendar", `${dayText} 마감: ${a.name}${a.subject ? ` (${a.subject})` : ""}`);
+      } else {
+        sendNotif("College Calendar", `${days}일 내 마감 과제 ${upcoming.length}개가 있습니다.`);
+      }
+    };
+
+    const startupTimer = setTimeout(checkNotifications, 3000);
+    const hourlyTimer = setInterval(checkNotifications, 60 * 60 * 1000);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      clearTimeout(startupTimer);
+      clearInterval(hourlyTimer);
+    };
   }, []);
 
   const isGlassMode = themeMode === "glass";
@@ -204,7 +256,7 @@ const WidgetComponent: React.FC = () => {
           display: flex;
           flex-direction: column;
           background: var(--widget-bg);
-          border: 1px solid var(--widget-border);
+          border: none;
           border-radius: 24px;
           box-sizing: border-box;
           overflow: hidden;

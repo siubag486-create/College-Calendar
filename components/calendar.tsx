@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   type Assignment,
   loadAssignments,
   saveAssignments,
   getDayDiff,
   formatYMD,
+  loadNotifSettings,
+  saveNotifSettings,
 } from "@/lib/assignments";
 
 declare global {
@@ -16,6 +18,7 @@ declare global {
       closeEditor: () => void;
       notifyAssignmentsChanged: () => void;
       onAssignmentsChanged: (callback: () => void) => void;
+      sendNotification: (title: string, body: string) => void;
     };
   }
 }
@@ -62,6 +65,10 @@ const CalendarComponent: React.FC = () => {
   const [isElectron, setIsElectron] = useState(false);
   const [widgetDays, setWidgetDays] = useState<WidgetDays>(7);
   const [dayPickerOpen, setDayPickerOpen] = useState(false);
+  const [notifEnabled, setNotifEnabled] = useState(true);
+  const [notifDays, setNotifDays] = useState(1);
+  const [notifPickerOpen, setNotifPickerOpen] = useState(false);
+  const notifDropdownRef = useRef<HTMLDivElement>(null);
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -75,6 +82,9 @@ const CalendarComponent: React.FC = () => {
     setIsElectron(!!window.electronAPI);
     setAssignments(loadAssignments());
     setWidgetDays(loadWidgetDays());
+    const notif = loadNotifSettings();
+    setNotifEnabled(notif.enabled);
+    setNotifDays(notif.days);
   }, []);
 
   // Listen for assignment changes from widget
@@ -92,6 +102,17 @@ const CalendarComponent: React.FC = () => {
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [dayPickerOpen]);
+
+  // Close notif picker on outside click
+  useEffect(() => {
+    if (!notifPickerOpen) return;
+    const close = (e: MouseEvent) => {
+      if (notifDropdownRef.current?.contains(e.target as Node)) return;
+      setNotifPickerOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [notifPickerOpen]);
 
   const prevMonth = () => {
     if (currentMonth === 0) {
@@ -1127,6 +1148,125 @@ const CalendarComponent: React.FC = () => {
             justify-content: flex-end;
           }
         }
+
+        /* Notification settings */
+        .cal-notif-btn-wrap {
+          position: relative;
+          -webkit-app-region: no-drag;
+        }
+
+        .cal-notif-btn {
+          background: none;
+          border: 1px solid rgba(224, 224, 224, 0.15);
+          border-radius: 4px;
+          color: rgba(224, 224, 224, 0.4);
+          font-family: monospace;
+          font-size: 0.7rem;
+          cursor: pointer;
+          width: 24px;
+          height: 24px;
+          padding: 0;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: color 0.2s, border-color 0.2s, background 0.2s;
+        }
+
+        .cal-notif-btn.active {
+          color: #ff3c00;
+          border-color: rgba(255, 60, 0, 0.4);
+        }
+
+        .cal-notif-btn:hover {
+          color: #ff3c00;
+          border-color: rgba(255, 60, 0, 0.4);
+          background: rgba(255, 60, 0, 0.06);
+        }
+
+        .cal-notif-dropdown {
+          position: absolute;
+          top: calc(100% + 10px);
+          right: 0;
+          background: #111;
+          border: 1px solid rgba(224, 224, 224, 0.12);
+          border-radius: 12px;
+          padding: 0.75rem;
+          z-index: 60;
+          display: flex;
+          flex-direction: column;
+          gap: 0.65rem;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+          animation: daysFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+          min-width: 160px;
+        }
+
+        .cal-notif-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+        }
+
+        .cal-notif-label {
+          font-family: monospace;
+          font-size: 0.58rem;
+          letter-spacing: 0.1em;
+          color: rgba(224, 224, 224, 0.45);
+          text-transform: uppercase;
+        }
+
+
+        .cal-notif-divider {
+          border: none;
+          border-top: 1px solid rgba(224, 224, 224, 0.08);
+          margin: 0;
+        }
+
+        .cal-notif-days-label {
+          font-family: monospace;
+          font-size: 0.52rem;
+          letter-spacing: 0.1em;
+          color: rgba(224, 224, 224, 0.3);
+          text-transform: uppercase;
+          margin-bottom: 0.2rem;
+        }
+
+        .cal-notif-days-options {
+          display: flex;
+          gap: 4px;
+          flex-wrap: wrap;
+        }
+
+        .cal-notif-days-option {
+          background: transparent;
+          border: 1px solid rgba(224, 224, 224, 0.12);
+          border-radius: 6px;
+          color: rgba(224, 224, 224, 0.4);
+          font-family: monospace;
+          font-size: 0.55rem;
+          letter-spacing: 0.06em;
+          padding: 0.3rem 0.45rem;
+          cursor: pointer;
+          transition: background 0.12s, color 0.12s, border-color 0.12s;
+        }
+
+        .cal-notif-days-option:hover {
+          background: rgba(224, 224, 224, 0.06);
+          color: #e0e0e0;
+        }
+
+        .cal-notif-days-option.selected {
+          background: rgba(255, 60, 0, 0.12);
+          color: #ff3c00;
+          border-color: rgba(255, 60, 0, 0.3);
+        }
+
+        .cal-notif-days-option:disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
+
       `}</style>
 
       <div className="cal-root">
@@ -1149,6 +1289,90 @@ const CalendarComponent: React.FC = () => {
               </div>
 
               <div className="cal-header-right">
+                {/* Notification settings */}
+                {isElectron && (
+                  <div className="cal-notif-btn-wrap" ref={notifDropdownRef}>
+                    <button
+                      className={`cal-notif-btn${notifEnabled ? " active" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNotifPickerOpen(!notifPickerOpen);
+                      }}
+                      title="Notification settings"
+                      aria-label="Notification settings"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        {notifEnabled && <circle cx="18" cy="5" r="3" fill="#ff3c00" stroke="none" />}
+                      </svg>
+                    </button>
+                    {notifPickerOpen && (
+                      <div className="cal-notif-dropdown">
+                        <div className="cal-notif-row">
+                          <span className="cal-notif-label">Notifications</span>
+                          <button
+                            style={{
+                              background: "none",
+                              border: "none",
+                              padding: 0,
+                              cursor: "pointer",
+                              flexShrink: 0,
+                            }}
+                            onClick={() => {
+                              const next = !notifEnabled;
+                              setNotifEnabled(next);
+                              saveNotifSettings(next, notifDays);
+                            }}
+                            role="switch"
+                            aria-checked={notifEnabled}
+                          >
+                            <span style={{
+                              display: "block",
+                              width: 28,
+                              height: 16,
+                              borderRadius: 999,
+                              background: notifEnabled ? "#ff3c00" : "rgba(224,224,224,0.15)",
+                              position: "relative",
+                              transition: "background 0.2s",
+                            }}>
+                              <span style={{
+                                position: "absolute",
+                                top: 2,
+                                left: notifEnabled ? 14 : 2,
+                                width: 12,
+                                height: 12,
+                                borderRadius: "50%",
+                                background: "#e0e0e0",
+                                transition: "left 0.2s",
+                              }} />
+                            </span>
+                          </button>
+                        </div>
+                        <hr className="cal-notif-divider" />
+                        <div>
+                          <div className="cal-notif-days-label">Alert before</div>
+                          <div className="cal-notif-days-options">
+                            {[1, 3, 5, 7].map((d) => (
+                              <button
+                                key={d}
+                                className={`cal-notif-days-option${notifDays === d ? " selected" : ""}`}
+                                disabled={!notifEnabled}
+                                onClick={() => {
+                                  setNotifDays(d);
+                                  saveNotifSettings(notifEnabled, d);
+                                }}
+                              >
+                                {d}D
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Day range picker */}
                 <div className="cal-days-btn-wrap">
                   <button

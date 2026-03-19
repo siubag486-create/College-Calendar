@@ -6,11 +6,18 @@ files:
   - out/**
   - electron/main.js
   - electron/preload.js
+  - electron/platform.js
   - electron/win32.js
+  - electron/darwin.js
   - package.json
-  - node_modules/koffi/**
 win:
   target: nsis
+  files:
+    - node_modules/koffi/**
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+mac:
+  target: dmg
+  category: public.app-category.productivity
+  icon: build/icon.icns

@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "node scripts/run-eslint.cjs",
     "electron:dev": "node scripts/electron-dev.cjs",
-    "electron:build": "next build --webpack && tsc --project tsconfig.electron.json && electron-builder"
+    "electron:build": "next build --webpack && tsc --project tsconfig.electron.json && electron-builder",
+    "electron:build:mac": "next build --webpack && tsc --project tsconfig.electron.json && electron-builder --mac"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

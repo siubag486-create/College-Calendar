@@ -246,13 +246,22 @@ const HeroSection: React.FC = () => {
               <p>[ ARCHIVE 2024 ]</p>
               <p>SURFACE TENSION &amp; TOPOGRAPHICAL LIGHT</p>
             </div>
-            <a
-              href="/downloads/college-calendar-setup.exe"
-              download
-              className="cta-button"
-            >
-              DOWNLOAD
-            </a>
+            <div style={{ display: "flex", gap: "1rem", alignItems: "flex-end" }}>
+              <a
+                href="/downloads/college-calendar-setup.exe"
+                download
+                className="cta-button"
+              >
+                WINDOWS
+              </a>
+              <a
+                href="/downloads/college-calendar-mac.dmg"
+                download
+                className="cta-button"
+              >
+                macOS
+              </a>
+            </div>
           </div>
         </div>
 
