@@ -31,7 +31,8 @@ jobs:
 
       - name: Copy exe to public/downloads
         run: |
-          copy "dist\College Calendar Setup 0.1.0.exe" "public\downloads\college-calendar-setup.exe"
+          New-Item -ItemType Directory -Force -Path "public\downloads"
+          Copy-Item "dist\College Calendar Setup 0.1.0.exe" "public\downloads\college-calendar-setup.exe"
 
       - name: Commit and push
         run: |
