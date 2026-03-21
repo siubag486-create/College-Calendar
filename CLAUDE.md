@@ -24,7 +24,7 @@ pnpm electron:build:mac  # Build + compile electron + package .dmg installer (ma
 
 ## Architecture
 
-**Next.js 16 App Router** project with React 19, TypeScript, and Tailwind CSS v4.
+**Next.js 16 App Router** project with React 19, TypeScript, and Tailwind CSS v4. Font: `geist` package (`--font-geist-mono`), `radix-ui` for primitives.
 Static export mode (`output: "export"`) — no server required.
 
 ### Key directories
@@ -46,14 +46,14 @@ Static export mode (`output: "export"`) — no server required.
 
 - `components/hero-section.tsx` — Landing page hero (HALIDE/SILVER SULPHIDE dark design, Syncopate + monospace typography, grain texture, `#0a0a0a`/`#e0e0e0`/`#ff3c00` palette). 다운로드 버튼 Windows(.exe)/macOS(.dmg) 2개 분리
 - `components/calendar.tsx` — Full calendar with assignment management (client component, localStorage, always-editable — no edit mode toggle). `[ XD ]` button in header opens dropdown to select widget day range (7/14/30D), saved to `college-widget-days` localStorage key
-- `components/widget.tsx` — Compact widget (black/glass themes, date-grouped assignments, D-day badges). Day range driven by `college-widget-days` key (default 7). Theme stored in `college-widget-theme`
+- `components/widget.tsx` — Compact widget (black/glass themes, date-grouped assignments, D-day badges). Day range driven by `college-widget-days` key (default 7). Theme stored in `college-widget-theme`. 시작 5초 후 알림 체크 (`setTimeout 5000`): `sendNotification` IPC → fallback Notification API
 - `components/ui/button.tsx` — shadcn button
 - `lib/assignments.ts` — Shared Assignment interface, localStorage helpers (`loadAssignments`, `saveAssignments`), date utilities (`getDayDiff`, `formatYMD`), notification settings (`loadNotifSettings`, `saveNotifSettings`). localStorage keys: `college-assignments`, `college-notif-enabled`, `college-notif-days`, `college-notif-last-check`
 
 ### Electron (Desktop App)
 
 - `electron/main.ts` — Widget window (240x300, bottom-right, `focusable:true`, `skipTaskbar:true`) + Editor window (1000x800, center popup). Tray with left-click toggle editor, right-click menu.
-- `electron/preload.ts` — IPC bridge (`openEditor`, `closeEditor`, `notifyAssignmentsChanged`, `onAssignmentsChanged`)
+- `electron/preload.ts` — IPC bridge (`openEditor`, `closeEditor`, `notifyAssignmentsChanged`, `onAssignmentsChanged`, `sendNotification`)
 - `electron/win32.ts` — Win32 FFI via koffi (user32.dll + dwmapi.dll): `pinToBottom()` HWND_BOTTOM, `pinAboveDesktop()` Progman 위 고정, `uncloak()` DWM 클로킹 해제
 - `electron/darwin.ts` — macOS 위젯 고정 로직 (Electron 네이티브 API, koffi 불필요). `setVisibleOnAllWorkspaces()` + 일반 z-order 동작
 - `electron/platform.ts` — `process.platform` 분기: Windows → win32.ts (Buffer/FFI), macOS → darwin.ts (BrowserWindow API). 모든 함수는 `BrowserWindow`를 인자로 받음

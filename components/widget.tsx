@@ -53,7 +53,7 @@ function getDateLabel(dateStr: string): string {
 
 function getDdayBadge(diff: number): string | null {
   if (diff < 0) return null;
-  if (diff === 0) return "D-0";
+  if (diff === 0) return "D-Day";
   if (diff <= 30) return `D-${diff}`;
   return null;
 }
@@ -62,7 +62,9 @@ function loadWidgetTheme(): WidgetThemeMode {
   if (typeof window === "undefined") return "black";
 
   try {
-    return localStorage.getItem(WIDGET_THEME_KEY) === "glass" ? "glass" : "black";
+    return localStorage.getItem(WIDGET_THEME_KEY) === "glass"
+      ? "glass"
+      : "black";
   } catch {
     return "black";
   }
@@ -116,7 +118,11 @@ const WidgetComponent: React.FC = () => {
       if (!enabled) return;
 
       const today = new Date();
-      const todayStr = formatYMD(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayStr = formatYMD(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+      );
 
       const all = loadAssignments();
       const upcoming = all.filter((a) => {
@@ -131,20 +137,25 @@ const WidgetComponent: React.FC = () => {
       if (upcoming.length === 1) {
         const a = upcoming[0];
         const diff = getDayDiff(a.date);
-        const dayText = diff === 0 ? "오늘" : diff === 1 ? "내일" : `${diff}일 후`;
-        sendNotif("College Calendar", `${dayText} 마감: ${a.name}${a.subject ? ` (${a.subject})` : ""}`);
+        const dayText =
+          diff === 0 ? "오늘" : diff === 1 ? "내일" : `${diff}일 후`;
+        sendNotif(
+          "College Calendar",
+          `${dayText} 마감: ${a.name}${a.subject ? ` (${a.subject})` : ""}`,
+        );
       } else {
-        sendNotif("College Calendar", `${days}일 내 마감 과제 ${upcoming.length}개가 있습니다.`);
+        sendNotif(
+          "College Calendar",
+          `${days}일 내 마감 과제 ${upcoming.length}개가 있습니다.`,
+        );
       }
     };
 
-    const startupTimer = setTimeout(checkNotifications, 3000);
-    const hourlyTimer = setInterval(checkNotifications, 60 * 60 * 1000);
+    const startupTimer = setTimeout(checkNotifications, 5000);
 
     return () => {
       window.cancelAnimationFrame(frameId);
       clearTimeout(startupTimer);
-      clearInterval(hourlyTimer);
     };
   }, []);
 
@@ -479,8 +490,15 @@ const WidgetComponent: React.FC = () => {
           flex-shrink: 0;
         }
 
-        .widget-name {
+        .widget-name-wrap {
           flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+        }
+
+        .widget-name {
           min-width: 0;
           font-size: 0.7rem;
           font-weight: 600;
@@ -489,6 +507,14 @@ const WidgetComponent: React.FC = () => {
           overflow: hidden;
           text-overflow: ellipsis;
           transition: color 0.4s ease;
+        }
+
+        .widget-item-time {
+          font-size: 0.48rem;
+          letter-spacing: 0.1em;
+          color: var(--time-color);
+          font-variant-numeric: tabular-nums;
+          font-feature-settings: "tnum" 1;
         }
 
         .widget-badge {
@@ -575,22 +601,42 @@ const WidgetComponent: React.FC = () => {
               grouped.map((group) => {
                 const diff = getDayDiff(group.date);
                 const isToday = diff === 0;
-                const groupTime = group.items[0]?.time;
+                const uniqueTimes = new Set(group.items.map((a) => a.time));
+                const showPerItemTime = uniqueTimes.size > 1;
+                const singleTime = !showPerItemTime
+                  ? group.items[0]?.time
+                  : undefined;
                 return (
                   <div key={group.date} className="widget-date-group">
-                    <div className={`widget-date-header${isToday ? " is-today" : ""}`}>
-                      <span className="widget-date-label">{getDateLabel(group.date)}</span>
-                      {groupTime && <span className="widget-date-time">{groupTime}</span>}
+                    <div
+                      className={`widget-date-header${isToday ? " is-today" : ""}`}
+                    >
+                      <span className="widget-date-label">
+                        {getDateLabel(group.date)}
+                      </span>
+                      {singleTime && (
+                        <span className="widget-date-time">{singleTime}</span>
+                      )}
                     </div>
                     {group.items.map((a) => {
                       const badge = getDdayBadge(getDayDiff(a.date));
                       const isUrgent = diff <= 1;
                       return (
                         <div key={a.id} className="widget-item">
-                          <div className="widget-dot" style={{ background: a.color }} />
-                          <span className="widget-name">{a.name}</span>
+                          <div
+                            className="widget-dot"
+                            style={{ background: a.color }}
+                          />
+                          <div className="widget-name-wrap">
+                            <span className="widget-name">{a.name}</span>
+                            {showPerItemTime && a.time && (
+                              <span className="widget-item-time">{a.time}</span>
+                            )}
+                          </div>
                           {badge && (
-                            <span className={`widget-badge${isUrgent ? " urgent" : ""}`}>
+                            <span
+                              className={`widget-badge${isUrgent ? " urgent" : ""}`}
+                            >
                               {badge}
                             </span>
                           )}
